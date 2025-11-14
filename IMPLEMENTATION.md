@@ -194,52 +194,58 @@ This document tracks the implementation progress of all features in the loyalty 
 ### Rules Engine
 
 **JsonLogic Evaluator** (api/internal/rules/jsonlogic.go):
-- [ ] Parse JsonLogic conditions
-- [ ] Comparison operators (==, !=, >, >=, <, <=)
-- [ ] Logical operators (all, any, none)
-- [ ] Array operators (in)
-- [ ] Variable access (var)
+- [x] Parse JsonLogic conditions
+- [x] Comparison operators (==, !=, >, >=, <, <=)
+- [x] Logical operators (all, any, none)
+- [x] Array operators (in)
+- [x] Variable access (var)
 
 **Custom Operators** (api/internal/rules/custom_operators.go):
-- [ ] within_days operator
-- [ ] nth_event_in_period operator
-- [ ] distinct_visit_days operator
+- [x] within_days operator
+- [x] nth_event_in_period operator
+- [x] distinct_visit_days operator
 
 **Rules Engine** (api/internal/rules/engine.go):
-- [ ] ProcessEvent function
-- [ ] Get matching rules (with cache)
-- [ ] Evaluate rule conditions
-- [ ] Check caps and cooldowns
-- [ ] Issue rewards
-- [ ] Advisory locks for concurrency
+- [x] ProcessEvent function
+- [x] Get matching rules (with cache)
+- [x] Evaluate rule conditions
+- [x] Check caps and cooldowns
+- [x] Issue rewards
+- [x] Advisory locks for concurrency
 
 **Cap Enforcement** (api/internal/rules/caps.go):
-- [ ] Per-user cap checking
-- [ ] Global cap checking
-- [ ] Cooldown checking
-- [ ] Query optimization for cap checks
+- [x] Per-user cap checking
+- [x] Global cap checking
+- [x] Cooldown checking
+- [x] Query optimization for cap checks
 
 **Reward Issuance** (api/internal/rules/issuance.go):
-- [ ] Transaction-based issuance
-- [ ] Advisory lock implementation
-- [ ] Budget reservation
-- [ ] State creation (reserved)
-- [ ] Async processing trigger
+- [x] Transaction-based issuance
+- [x] Advisory lock implementation
+- [x] Budget reservation
+- [x] State creation (reserved)
+- [ ] Async processing trigger (deferred to Reward Service)
 
 **Rule Cache** (api/internal/rules/cache.go):
-- [ ] Cache implementation
-- [ ] Get/Set with TTL
-- [ ] Cleanup expired entries
+- [x] Cache implementation
+- [x] Get/Set with TTL
+- [x] Cleanup expired entries
 
 **Tests**:
-- [ ] Simple condition tests
-- [ ] Complex condition tests
-- [ ] Custom operator tests
-- [ ] Per-user cap tests
-- [ ] Global cap tests
-- [ ] Cooldown tests
-- [ ] Concurrent event tests
-- [ ] Performance benchmark (<25ms target)
+- [x] Simple condition tests
+- [x] Complex condition tests
+- [x] Custom operator tests (implementation ready)
+- [ ] Per-user cap tests (requires test database)
+- [ ] Global cap tests (requires test database)
+- [ ] Cooldown tests (requires test database)
+- [ ] Concurrent event tests (requires test database)
+- [x] Performance benchmark (<25ms target)
+
+**Integration**:
+- [x] Updated events handler to call rules engine
+- [x] Event creation with idempotency
+- [x] Rules engine invocation on event creation
+- [x] Return issuances in event response
 
 ### Reward Service
 
@@ -285,42 +291,42 @@ This document tracks the implementation progress of all features in the loyalty 
 ### Budget & Ledger Service
 
 **Budget Service** (api/internal/budget/service.go):
-- [ ] ReserveBudget function
-- [ ] ChargeReservation function
-- [ ] ReleaseReservation function
-- [ ] Hard cap enforcement
-- [ ] Soft cap alerting
-- [ ] Currency validation
+- [x] ReserveBudget function
+- [x] ChargeReservation function
+- [x] ReleaseReservation function
+- [x] Hard cap enforcement
+- [x] Soft cap alerting
+- [x] Currency validation
 
 **Budget Topup** (api/internal/budget/topup.go):
-- [ ] TopupBudget function
-- [ ] Ledger entry creation
+- [x] TopupBudget function
+- [x] Ledger entry creation
 
 **Reconciliation** (api/internal/budget/reconciliation.go):
-- [ ] ReconcileBudget function
-- [ ] Balance verification
-- [ ] Discrepancy detection
+- [x] ReconcileBudget function
+- [x] Balance verification
+- [x] Discrepancy detection
 
 **Alerts** (api/internal/budget/alerts.go):
-- [ ] Soft cap exceeded alert
-- [ ] Hard cap approaching alert
+- [x] Soft cap exceeded alert
+- [x] Hard cap approaching alert
 
 **Period Budgets** (api/internal/budget/period.go):
-- [ ] Monthly budget reset
-- [ ] Cron job for reset
+- [x] Monthly budget reset
+- [x] Cron job for reset
 
 **Reports** (api/internal/budget/reports.go):
-- [ ] GenerateReport function
-- [ ] Aggregation logic
+- [x] GenerateReport function
+- [x] Aggregation logic
 
 **Tests**:
-- [ ] Reserve budget tests
-- [ ] Hard cap tests
-- [ ] Soft cap tests
-- [ ] Charge/release tests
-- [ ] Reconciliation tests
-- [ ] Currency validation tests
-- [ ] Concurrent reservation tests
+- [x] Reserve budget tests
+- [x] Hard cap tests
+- [x] Soft cap tests
+- [x] Charge/release tests
+- [x] Reconciliation tests
+- [x] Currency validation tests
+- [x] Concurrent reservation tests
 
 ---
 
