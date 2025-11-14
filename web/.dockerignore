@@ -1,7 +1,58 @@
+# Dependencies
 node_modules
+package-lock.json
+
+# Build output
 dist
+build
+.next
+out
+
+# Version control
 .git
 .gitignore
+
+# Documentation
 *.md
+README*
+
+# Docker files
 Dockerfile
 .dockerignore
+docker-compose*.yml
+
+# Development
+.env
+.env.local
+.env.development
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+test/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.DS_Store
+Thumbs.db

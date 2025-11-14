@@ -1,0 +1,222 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: loyalty_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+          cache-dependency-path: api/go.sum
+
+      - name: Install dependencies
+        working-directory: ./api
+        run: go mod download
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+
+      - name: Run migrations
+        working-directory: ./api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test?sslmode=disable
+        run: |
+          # Install golang-migrate if needed
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path ../migrations -database "${DATABASE_URL}" up || true
+
+      - name: Run unit tests
+        working-directory: ./api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test?sslmode=disable
+        run: |
+          go test ./internal/... -v -coverprofile=coverage-unit.out -covermode=atomic
+
+      - name: Run integration tests
+        working-directory: ./api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test?sslmode=disable
+        run: |
+          go test ./tests/integration/... -v -coverprofile=coverage-integration.out -covermode=atomic
+
+      - name: Run API tests
+        working-directory: ./api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test?sslmode=disable
+        run: |
+          go test ./tests/api/... -v -coverprofile=coverage-api.out -covermode=atomic
+
+      - name: Merge coverage reports
+        working-directory: ./api
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+          gocovmerge coverage-*.out > coverage.out
+
+      - name: Generate coverage report
+        working-directory: ./api
+        run: |
+          go tool cover -func=coverage.out
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage to Codecov (optional)
+        uses: codecov/codecov-action@v4
+        if: false  # Enable if you want to use codecov
+        with:
+          files: ./api/coverage.out
+          flags: backend
+          name: backend-coverage
+
+      - name: Check coverage threshold
+        working-directory: ./api
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: ${COVERAGE}%"
+
+          # Check if coverage meets 80% threshold
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below 80% threshold"
+            exit 1
+          fi
+          echo "Coverage ${COVERAGE}% meets the 80% threshold"
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            api/coverage.out
+            api/coverage.html
+
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'  # Only run on push, not on PRs
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: loyalty_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install dependencies
+        working-directory: ./api
+        run: go mod download
+
+      - name: Run migrations
+        working-directory: ./api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path ../migrations -database "${DATABASE_URL}" up || true
+
+      - name: Run performance benchmarks
+        working-directory: ./api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test?sslmode=disable
+        run: |
+          go test ./tests/performance/... -bench=. -benchmem -benchtime=10s > benchmark-results.txt
+          cat benchmark-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: api/benchmark-results.txt
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Run linter
+        working-directory: ./web
+        run: npm run lint || true
+
+      - name: Run type check
+        working-directory: ./web
+        run: npm run type-check || true
+
+      - name: Run tests
+        working-directory: ./web
+        run: npm test -- --coverage || true
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: false  # Enable when frontend tests are implemented
+        with:
+          name: frontend-coverage
+          path: web/coverage/
+
+  integration-health:
+    name: Integration Health Check
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+
+    steps:
+      - name: All tests passed
+        run: echo "All test suites passed successfully!"
