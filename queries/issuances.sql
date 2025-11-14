@@ -23,3 +23,18 @@ LIMIT $3 OFFSET $4;
 SELECT * FROM issuances
 WHERE tenant_id = $1 AND customer_id = $2 AND status IN ('issued', 'reserved')
 ORDER BY issued_at DESC;
+
+-- name: UpdateIssuanceDetails :exec
+UPDATE issuances
+SET code = $3,
+    external_ref = $4,
+    expires_at = $5
+WHERE id = $1 AND tenant_id = $2;
+
+-- name: GetExpiredIssuances :many
+SELECT id, tenant_id, campaign_id, cost_amount
+FROM issuances
+WHERE status = 'issued'
+  AND expires_at IS NOT NULL
+  AND expires_at < NOW()
+FOR UPDATE SKIP LOCKED;
