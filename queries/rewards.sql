@@ -10,7 +10,7 @@ WHERE id = $1 AND tenant_id = $2;
 -- name: ListRewards :many
 SELECT * FROM reward_catalog
 WHERE tenant_id = $1
-ORDER BY created_at DESC;
+ORDER BY name;
 
 -- name: ListActiveRewards :many
 SELECT * FROM reward_catalog

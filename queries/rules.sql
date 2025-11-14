@@ -10,7 +10,7 @@ WHERE id = $1 AND tenant_id = $2;
 -- name: ListActiveRules :many
 SELECT * FROM rules
 WHERE tenant_id = $1 AND active = true
-ORDER BY created_at DESC;
+ORDER BY name;
 
 -- name: UpdateRuleStatus :exec
 UPDATE rules

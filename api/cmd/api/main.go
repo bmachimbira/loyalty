@@ -9,25 +9,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/bmachimbira/loyalty/api/internal/config"
+	httputil "github.com/bmachimbira/loyalty/api/internal/http"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	// Load configuration from environment
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v\n", err)
 	}
 
 	// Initialize database connection pool
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Unable to create connection pool: %v\n", err)
 	}
@@ -40,51 +36,21 @@ func main() {
 
 	log.Println("Successfully connected to database")
 
-	// Initialize Gin router
-	router := gin.Default()
-
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status": "ok",
-			"time":   time.Now().Format(time.RFC3339),
-		})
-	})
-
-	// API v1 routes
-	v1 := router.Group("/v1")
-	{
-		// Placeholder routes - to be implemented
-		v1.GET("/ping", func(c *gin.Context) {
-			c.JSON(200, gin.H{
-				"message": "pong",
-			})
-		})
-	}
-
-	// Public routes (WhatsApp, USSD)
-	public := router.Group("/public")
-	{
-		public.GET("/wa/webhook", func(c *gin.Context) {
-			c.JSON(200, gin.H{"message": "WhatsApp webhook endpoint"})
-		})
-		public.POST("/wa/webhook", func(c *gin.Context) {
-			c.JSON(200, gin.H{"message": "WhatsApp webhook endpoint"})
-		})
-		public.POST("/ussd/callback", func(c *gin.Context) {
-			c.JSON(200, gin.H{"message": "USSD callback endpoint"})
-		})
-	}
+	// Set up router with all routes and middleware
+	router := httputil.SetupRouter(pool, cfg.JWTSecret, cfg.HMACKeys)
 
 	// Start server
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: router,
+		Addr:         ":" + cfg.Port,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	// Graceful shutdown
 	go func() {
-		log.Printf("Starting server on port %s", port)
+		log.Printf("Starting server on port %s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v\n", err)
 		}

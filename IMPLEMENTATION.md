@@ -41,151 +41,151 @@ This document tracks the implementation progress of all features in the loyalty 
 - [ ] All generated Go code compiles
 
 ### Backend - Core Setup
-- [ ] Go project initialized (go.mod)
-- [ ] Main application entry point (cmd/api/main.go)
-- [ ] Database connection pool setup
-- [ ] Environment variable configuration
-- [ ] Graceful shutdown implemented
-- [ ] Project structure organized
+- [x] Go project initialized (go.mod)
+- [x] Main application entry point (cmd/api/main.go)
+- [x] Database connection pool setup
+- [x] Environment variable configuration
+- [x] Graceful shutdown implemented
+- [x] Project structure organized
 
 ### Backend - Authentication & Authorization
 
 **JWT Authentication**:
-- [ ] JWT token generation (api/internal/auth/jwt.go)
-- [ ] JWT token validation
-- [ ] Claims extraction (user_id, tenant_id, role)
-- [ ] Access token (15 min expiry)
-- [ ] Refresh token (7 day expiry)
-- [ ] Refresh token flow
+- [x] JWT token generation (api/internal/auth/jwt.go)
+- [x] JWT token validation
+- [x] Claims extraction (user_id, tenant_id, role)
+- [x] Access token (15 min expiry)
+- [x] Refresh token (7 day expiry)
+- [x] Refresh token flow
 
 **HMAC Authentication**:
-- [ ] HMAC signature generation (api/internal/auth/hmac.go)
-- [ ] HMAC signature verification
-- [ ] Timestamp validation (5 min window)
-- [ ] Key management from HMAC_KEYS_JSON
+- [x] HMAC signature generation (api/internal/auth/hmac.go)
+- [x] HMAC signature verification
+- [x] Timestamp validation (5 min window)
+- [x] Key management from HMAC_KEYS_JSON
 
 **Password Handling**:
-- [ ] bcrypt password hashing (api/internal/auth/password.go)
-- [ ] Password comparison
+- [x] bcrypt password hashing (api/internal/auth/password.go)
+- [x] Password comparison
 
 ### Backend - Middleware
 
 **Tenant Context**:
-- [ ] Extract tenant_id from JWT claims (api/internal/http/middleware/tenant.go)
-- [ ] Set PostgreSQL app.tenant_id session variable
-- [ ] Handle missing tenant_id errors
-- [ ] Add tenant_id to request context
+- [x] Extract tenant_id from JWT claims (api/internal/http/middleware/tenant.go)
+- [x] Set PostgreSQL app.tenant_id session variable
+- [x] Handle missing tenant_id errors
+- [x] Add tenant_id to request context
 
 **Authentication**:
-- [ ] RequireAuth middleware (api/internal/http/middleware/auth.go)
-- [ ] RequireRole middleware
-- [ ] RequireHMAC middleware for server-to-server
+- [x] RequireAuth middleware (api/internal/http/middleware/auth.go)
+- [x] RequireRole middleware
+- [x] RequireHMAC middleware for server-to-server
 
 **Idempotency**:
-- [ ] Idempotency-Key header handling (api/internal/http/middleware/idempotency.go)
-- [ ] Check for duplicate keys in database
-- [ ] Return cached responses for duplicates
+- [x] Idempotency-Key header handling (api/internal/http/middleware/idempotency.go)
+- [x] Check for duplicate keys (in-memory cache for Phase 1)
+- [x] Return cached responses for duplicates
 
 **Other Middleware**:
-- [ ] CORS middleware
-- [ ] Request ID middleware
-- [ ] Logging middleware
-- [ ] Metrics middleware
+- [x] CORS middleware
+- [x] Request ID middleware
+- [x] Logging middleware
+- [ ] Metrics middleware (deferred to Phase 4)
 
 ### Backend - API Handlers
 
 **Customers API** (api/internal/http/handlers/customers.go):
-- [ ] POST /v1/tenants/:tid/customers (create)
-- [ ] GET /v1/tenants/:tid/customers/:id (get)
-- [ ] GET /v1/tenants/:tid/customers (list with pagination)
-- [ ] PATCH /v1/tenants/:tid/customers/:id/status (update status)
-- [ ] E.164 phone validation
+- [x] POST /v1/tenants/:tid/customers (create) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/customers/:id (get) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/customers (list with pagination) - ready for sqlc integration
+- [x] PATCH /v1/tenants/:tid/customers/:id/status (update status) - ready for sqlc integration
+- [x] E.164 phone validation
 
 **Events API** (api/internal/http/handlers/events.go):
-- [ ] POST /v1/tenants/:tid/events (create with idempotency)
-- [ ] GET /v1/tenants/:tid/events/:id (get)
-- [ ] GET /v1/tenants/:tid/events (list)
-- [ ] Trigger rules engine on event creation
+- [x] POST /v1/tenants/:tid/events (create with idempotency) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/events/:id (get) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/events (list) - ready for sqlc integration
+- [ ] Trigger rules engine on event creation (Phase 2)
 
 **Rules API** (api/internal/http/handlers/rules.go):
-- [ ] POST /v1/tenants/:tid/rules (create)
-- [ ] GET /v1/tenants/:tid/rules (list)
-- [ ] GET /v1/tenants/:tid/rules/:id (get)
-- [ ] PATCH /v1/tenants/:tid/rules/:id (update)
-- [ ] DELETE /v1/tenants/:tid/rules/:id (soft delete)
-- [ ] JsonLogic condition validation
+- [x] POST /v1/tenants/:tid/rules (create) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/rules (list) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/rules/:id (get) - ready for sqlc integration
+- [x] PATCH /v1/tenants/:tid/rules/:id (update) - ready for sqlc integration
+- [x] DELETE /v1/tenants/:tid/rules/:id (soft delete) - ready for sqlc integration
+- [ ] JsonLogic condition validation (Phase 2)
 
 **Rewards API** (api/internal/http/handlers/rewards.go):
-- [ ] POST /v1/tenants/:tid/reward-catalog (create)
-- [ ] GET /v1/tenants/:tid/reward-catalog (list)
-- [ ] GET /v1/tenants/:tid/reward-catalog/:id (get)
-- [ ] PATCH /v1/tenants/:tid/reward-catalog/:id (update)
-- [ ] POST /v1/tenants/:tid/reward-catalog/:id/upload-codes (CSV upload)
+- [x] POST /v1/tenants/:tid/reward-catalog (create) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/reward-catalog (list) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/reward-catalog/:id (get) - ready for sqlc integration
+- [x] PATCH /v1/tenants/:tid/reward-catalog/:id (update) - ready for sqlc integration
+- [x] POST /v1/tenants/:tid/reward-catalog/:id/upload-codes (CSV upload) - ready for sqlc integration
 
 **Issuances API** (api/internal/http/handlers/issuances.go):
-- [ ] GET /v1/tenants/:tid/issuances (list)
-- [ ] GET /v1/tenants/:tid/issuances/:id (get)
-- [ ] POST /v1/tenants/:tid/issuances/:id/redeem (redeem)
-- [ ] POST /v1/tenants/:tid/issuances/:id/cancel (cancel)
+- [x] GET /v1/tenants/:tid/issuances (list) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/issuances/:id (get) - ready for sqlc integration
+- [x] POST /v1/tenants/:tid/issuances/:id/redeem (redeem) - ready for sqlc integration
+- [x] POST /v1/tenants/:tid/issuances/:id/cancel (cancel) - ready for sqlc integration
 
 **Budgets API** (api/internal/http/handlers/budgets.go):
-- [ ] POST /v1/tenants/:tid/budgets (create)
-- [ ] GET /v1/tenants/:tid/budgets (list)
-- [ ] GET /v1/tenants/:tid/budgets/:id (get)
-- [ ] POST /v1/tenants/:tid/budgets/:id/topup (topup)
-- [ ] GET /v1/tenants/:tid/ledger (query ledger)
+- [x] POST /v1/tenants/:tid/budgets (create) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/budgets (list) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/budgets/:id (get) - ready for sqlc integration
+- [x] POST /v1/tenants/:tid/budgets/:id/topup (topup) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/ledger (query ledger) - ready for sqlc integration
 
 **Campaigns API** (api/internal/http/handlers/campaigns.go):
-- [ ] POST /v1/tenants/:tid/campaigns (create)
-- [ ] GET /v1/tenants/:tid/campaigns (list)
-- [ ] PATCH /v1/tenants/:tid/campaigns/:id (update)
+- [x] POST /v1/tenants/:tid/campaigns (create) - ready for sqlc integration
+- [x] GET /v1/tenants/:tid/campaigns (list) - ready for sqlc integration
+- [x] PATCH /v1/tenants/:tid/campaigns/:id (update) - ready for sqlc integration
 
 **Error Handling**:
-- [ ] ErrorResponse type defined (api/internal/http/errors.go)
-- [ ] Error codes implemented
-- [ ] Consistent error responses
+- [x] ErrorResponse type defined (api/internal/http/errors.go)
+- [x] Error codes implemented
+- [x] Consistent error responses
 
 **Request Validation**:
-- [ ] ValidateE164Phone (api/internal/http/validation.go)
-- [ ] ValidateUUID
-- [ ] ValidateCurrency
-- [ ] ValidateEventType
-- [ ] ValidateRewardType
+- [x] ValidateE164Phone (api/internal/http/validation.go)
+- [x] ValidateUUID
+- [x] ValidateCurrency
+- [x] ValidateEventType
+- [x] ValidateRewardType
 
 **Router Setup**:
-- [ ] SetupRouter function (api/internal/http/router.go)
-- [ ] Health check endpoint
-- [ ] Public routes group
-- [ ] V1 API routes group with auth
-- [ ] Update main.go to use router
+- [x] SetupRouter function (api/internal/http/router.go)
+- [x] Health check endpoint
+- [x] Public routes group
+- [x] V1 API routes group with auth
+- [x] Update main.go to use router
 
 ### Frontend - Core Setup
-- [ ] Vite + React + TypeScript project initialized
-- [ ] Tailwind CSS configured
-- [ ] shadcn/ui initialized
-- [ ] All required shadcn/ui components installed
-- [ ] TypeScript types defined (web/src/lib/types.ts)
-- [ ] API client implemented (web/src/lib/api.ts)
+- [x] Vite + React + TypeScript project initialized
+- [x] Tailwind CSS configured
+- [x] shadcn/ui initialized
+- [x] All required shadcn/ui components installed
+- [x] TypeScript types defined (web/src/lib/types.ts)
+- [x] API client implemented (web/src/lib/api.ts)
 
 ### Frontend - Authentication
-- [ ] AuthContext created (web/src/contexts/AuthContext.tsx)
-- [ ] Login page
-- [ ] Token management (localStorage)
-- [ ] Protected routes
-- [ ] Logout functionality
+- [x] AuthContext created (web/src/contexts/AuthContext.tsx)
+- [x] Login page
+- [x] Token management (localStorage)
+- [x] Protected routes
+- [x] Logout functionality
 
 ### Frontend - Layout
-- [ ] Layout component (web/src/components/Layout.tsx)
-- [ ] Navigation bar
-- [ ] Routing setup (React Router)
+- [x] Layout component (web/src/components/Layout.tsx)
+- [x] Navigation bar
+- [x] Routing setup (React Router)
 
 ### Frontend - Pages (Basic Structure)
-- [ ] Dashboard page (web/src/pages/Dashboard.tsx)
-- [ ] Customers page (web/src/pages/Customers.tsx)
-- [ ] Rewards page (web/src/pages/Rewards.tsx)
-- [ ] Rules page (web/src/pages/Rules.tsx)
-- [ ] Campaigns page (web/src/pages/Campaigns.tsx)
-- [ ] Budgets page (web/src/pages/Budgets.tsx)
+- [x] Dashboard page (web/src/pages/Dashboard.tsx)
+- [x] Customers page (web/src/pages/Customers.tsx)
+- [x] Rewards page (web/src/pages/Rewards.tsx)
+- [x] Rules page (web/src/pages/Rules.tsx)
+- [x] Campaigns page (web/src/pages/Campaigns.tsx)
+- [x] Budgets page (web/src/pages/Budgets.tsx)
 
 ---
 
