@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,30 +11,42 @@ import (
 
 	"github.com/bmachimbira/loyalty/api/internal/config"
 	httputil "github.com/bmachimbira/loyalty/api/internal/http"
+	"github.com/bmachimbira/loyalty/api/internal/logging"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
+	// Initialize structured logger
+	logger := logging.New()
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v\n", err)
+		logger.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
+
+	logger.Info("Configuration loaded successfully",
+		"port", cfg.Port,
+		"log_level", os.Getenv("LOG_LEVEL"),
+	)
 
 	// Initialize database connection pool
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Unable to create connection pool: %v\n", err)
+		logger.Error("Unable to create database connection pool", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
 	// Verify database connection
 	if err := pool.Ping(ctx); err != nil {
-		log.Fatalf("Unable to ping database: %v\n", err)
+		logger.Error("Unable to ping database", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Successfully connected to database")
+	logger.Info("Successfully connected to database")
 
 	// Set up router with all routes and middleware
 	router := httputil.SetupRouter(pool, cfg.JWTSecret, cfg.HMACKeys)
@@ -48,27 +60,41 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown
+	// Graceful shutdown handler
 	go func() {
-		log.Printf("Starting server on port %s", cfg.Port)
+		logger.Info("Starting HTTP server",
+			"port", cfg.Port,
+			"read_timeout", srv.ReadTimeout,
+			"write_timeout", srv.WriteTimeout,
+		)
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v\n", err)
+			logger.Error("Server failed to start", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	sig := <-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("Received shutdown signal",
+		"signal", sig.String(),
+	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Graceful shutdown with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+	// Attempt graceful shutdown
+	logger.Info("Shutting down server gracefully...")
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exited")
+	logger.Info("Server shutdown complete")
+	slog.SetDefault(nil) // Flush any remaining logs
 }

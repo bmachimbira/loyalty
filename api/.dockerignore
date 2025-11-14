@@ -1,5 +1,37 @@
+# Documentation
 *.md
+README*
+
+# Version control
 .git
 .gitignore
+
+# Docker files
 Dockerfile
 .dockerignore
+docker-compose*.yml
+
+# Tests
+*_test.go
+testdata/
+coverage.out
+*.test
+
+# Development
+.env
+.env.local
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Temporary files
+tmp/
+temp/
+*.log

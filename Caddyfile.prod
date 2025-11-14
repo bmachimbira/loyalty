@@ -1,0 +1,155 @@
+{
+    # Global options
+    email admin@yourdomain.com
+    # Uncomment for staging Let's Encrypt during testing
+    # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# Replace with your actual domain
+yourdomain.com www.yourdomain.com {
+    # Enable automatic HTTPS via Let's Encrypt
+    # TLS certificates will be automatically obtained and renewed
+
+    # Security headers
+    header {
+        # Prevent clickjacking
+        X-Frame-Options "DENY"
+
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+
+        # HSTS - Force HTTPS for 1 year including subdomains
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Content Security Policy
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://graph.facebook.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+        # Permissions policy
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+
+        # Remove server header for security
+        -Server
+    }
+
+    # Enable compression
+    encode gzip zstd
+
+    # Rate limiting - 100 requests per minute per IP
+    rate_limit {
+        zone api_zone {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+        zone public_zone {
+            key {remote_host}
+            events 30
+            window 1m
+        }
+    }
+
+    # Health check endpoint (handled by Caddy)
+    respond /health 200 {
+        body "OK"
+    }
+
+    # API routes with stricter rate limiting
+    @api {
+        path /v1/*
+    }
+    handle @api {
+        rate_limit api_zone
+        reverse_proxy api:8080 {
+            # Load balancing if multiple API instances
+            lb_policy round_robin
+            lb_try_duration 5s
+            lb_try_interval 250ms
+
+            # Health check
+            health_uri /health
+            health_interval 10s
+            health_timeout 5s
+            health_status 200
+
+            # Request headers
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Port {server_port}
+
+            # Timeouts
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 10s
+                read_timeout 30s
+            }
+        }
+    }
+
+    # Public API routes (webhooks) with more lenient rate limiting
+    @public {
+        path /public/*
+    }
+    handle @public {
+        rate_limit public_zone
+        reverse_proxy api:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Web application (React SPA)
+    handle {
+        reverse_proxy web:80 {
+            # Health check for web
+            health_uri /
+            health_interval 30s
+            health_timeout 5s
+            health_status 200
+
+            # Headers
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Access logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100mb
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json {
+            time_format "iso8601"
+            message_key "message"
+        }
+        level INFO
+    }
+
+    # Error logging
+    log {
+        output file /var/log/caddy/error.log {
+            roll_size 50mb
+            roll_keep 3
+        }
+        format json
+        level ERROR
+    }
+}
+
+# Redirect HTTP to HTTPS
+http://yourdomain.com http://www.yourdomain.com {
+    redir https://{host}{uri} permanent
+}
