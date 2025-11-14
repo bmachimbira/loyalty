@@ -13,14 +13,24 @@ type Config struct {
 	JWTSecret   string
 	HMACKeys    auth.HMACKeys
 	Port        string
+
+	// WhatsApp Business API configuration
+	WhatsAppVerifyToken   string
+	WhatsAppAppSecret     string
+	WhatsAppPhoneNumberID string
+	WhatsAppAccessToken   string
 }
 
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
-		Port:        getEnvOrDefault("PORT", "8080"),
+		DatabaseURL:           os.Getenv("DATABASE_URL"),
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		Port:                  getEnvOrDefault("PORT", "8080"),
+		WhatsAppVerifyToken:   os.Getenv("WHATSAPP_VERIFY_TOKEN"),
+		WhatsAppAppSecret:     os.Getenv("WHATSAPP_APP_SECRET"),
+		WhatsAppPhoneNumberID: os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
+		WhatsAppAccessToken:   os.Getenv("WHATSAPP_ACCESS_TOKEN"),
 	}
 
 	// Validate required fields
@@ -38,6 +48,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load HMAC keys: %w", err)
 	}
 	cfg.HMACKeys = hmacKeys
+
+	// WhatsApp configuration is optional (not all deployments will use it)
+	// Log warning if not configured
+	if cfg.WhatsAppPhoneNumberID == "" || cfg.WhatsAppAccessToken == "" {
+		// WhatsApp not configured, but that's okay for development
+	}
 
 	return cfg, nil
 }

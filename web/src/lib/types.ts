@@ -39,6 +39,7 @@ export interface CreateRewardDTO {
   expiry_days?: number;
   inventory_total?: number;
   config?: Record<string, any>;
+  active?: boolean;
 }
 
 export interface Rule {
@@ -65,6 +66,7 @@ export interface CreateRuleDTO {
   per_user_cap?: number;
   global_cap?: number;
   cool_down_sec?: number;
+  active?: boolean;
 }
 
 export interface Campaign {

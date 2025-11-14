@@ -1,9 +1,12 @@
 package http
 
 import (
+	"os"
 	"time"
 
 	"github.com/bmachimbira/loyalty/api/internal/auth"
+	"github.com/bmachimbira/loyalty/api/internal/channels/ussd"
+	"github.com/bmachimbira/loyalty/api/internal/channels/whatsapp"
 	"github.com/bmachimbira/loyalty/api/internal/http/handlers"
 	"github.com/bmachimbira/loyalty/api/internal/http/middleware"
 	"github.com/gin-gonic/gin"
@@ -36,18 +39,28 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 	budgetsHandler := handlers.NewBudgetsHandler(pool)
 	campaignsHandler := handlers.NewCampaignsHandler(pool)
 
+	// Initialize channel handlers
+	waHandler := whatsapp.NewHandler(
+		pool,
+		os.Getenv("WHATSAPP_VERIFY_TOKEN"),
+		os.Getenv("WHATSAPP_APP_SECRET"),
+		os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
+		os.Getenv("WHATSAPP_ACCESS_TOKEN"),
+	)
+	ussdHandler := ussd.NewHandler(pool)
+
 	// Public routes (no authentication)
 	public := r.Group("/public")
 	{
 		// WhatsApp webhook endpoints
 		wa := public.Group("/wa")
 		{
-			wa.GET("/webhook", WhatsAppVerify)
-			wa.POST("/webhook", WhatsAppWebhook)
+			wa.GET("/webhook", waHandler.Verify)
+			wa.POST("/webhook", waHandler.Webhook)
 		}
 
 		// USSD callback endpoint
-		public.POST("/ussd/callback", USSDCallback)
+		public.POST("/ussd/callback", ussdHandler.HandleCallback)
 	}
 
 	// V1 API routes (authenticated)
@@ -154,41 +167,4 @@ func ReadyCheck(pool *pgxpool.Pool) gin.HandlerFunc {
 			"time":   time.Now().Format(time.RFC3339),
 		})
 	}
-}
-
-// Placeholder handlers for public endpoints
-// These will be implemented in Phase 3
-
-// WhatsAppVerify handles GET /public/wa/webhook (verification challenge)
-func WhatsAppVerify(c *gin.Context) {
-	// WhatsApp sends hub.mode, hub.verify_token, and hub.challenge
-	mode := c.Query("hub.mode")
-	token := c.Query("hub.verify_token")
-	challenge := c.Query("hub.challenge")
-
-	// TODO: Verify token against configured value
-	if mode == "subscribe" && token != "" {
-		c.String(200, challenge)
-		return
-	}
-
-	c.JSON(403, gin.H{"error": "Forbidden"})
-}
-
-// WhatsAppWebhook handles POST /public/wa/webhook (incoming messages)
-func WhatsAppWebhook(c *gin.Context) {
-	// TODO: Implement WhatsApp message handling
-	// 1. Verify signature
-	// 2. Parse message payload
-	// 3. Route to channel handler
-	c.JSON(200, gin.H{"status": "ok"})
-}
-
-// USSDCallback handles POST /public/ussd/callback
-func USSDCallback(c *gin.Context) {
-	// TODO: Implement USSD callback handling
-	// 1. Parse USSD request
-	// 2. Manage session state
-	// 3. Return USSD response
-	c.String(200, "END Thank you")
 }

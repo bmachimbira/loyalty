@@ -335,60 +335,88 @@ This document tracks the implementation progress of all features in the loyalty 
 ### WhatsApp Integration
 
 **Webhook Handler** (api/internal/channels/whatsapp/webhook.go):
-- [ ] GET /public/wa/webhook (verification)
-- [ ] POST /public/wa/webhook (messages)
-- [ ] Signature verification
+- [x] GET /public/wa/webhook (verification)
+- [x] POST /public/wa/webhook (messages)
+- [x] Signature verification
 
 **Message Types** (api/internal/channels/whatsapp/types.go):
-- [ ] WebhookPayload struct
-- [ ] Message types defined
+- [x] WebhookPayload struct
+- [x] Message types defined
 
 **Message Processor** (api/internal/channels/whatsapp/processor.go):
-- [ ] ProcessMessage function
-- [ ] Command parsing
-- [ ] Enrollment flow
-- [ ] Rewards listing
-- [ ] Balance checking
-- [ ] Referral handling
-- [ ] Help command
+- [x] ProcessMessage function
+- [x] Command parsing
+- [x] Enrollment flow
+- [x] Rewards listing
+- [x] Balance checking
+- [x] Referral handling
+- [x] Help command
 
 **Message Sender** (api/internal/channels/whatsapp/sender.go):
-- [ ] SendText function
-- [ ] SendTemplate function
-- [ ] HTTP client setup
+- [x] SendText function
+- [x] SendTemplate function
+- [x] HTTP client setup
 
 **Templates** (api/internal/channels/whatsapp/templates.go):
-- [ ] LOYALTY_WELCOME template
-- [ ] REWARD_ISSUED template
-- [ ] REWARD_REMINDER template
-- [ ] REWARD_REDEEMED template
+- [x] LOYALTY_WELCOME template
+- [x] REWARD_ISSUED template
+- [x] REWARD_REMINDER template
+- [x] REWARD_REDEEMED template
+
+**Session Management** (api/internal/channels/whatsapp/session.go):
+- [x] GetOrCreateSession
+- [x] UpdateSessionState
+- [x] LinkCustomer
+- [x] Session state management
 
 **Tests**:
-- [ ] Webhook verification test
-- [ ] Signature verification test
-- [ ] Message parsing test
-- [ ] Enrollment flow test
-- [ ] Template sending test
+- [x] Webhook verification test
+- [x] Signature verification test
+- [x] Message parsing test
+- [x] Command parsing test
+- [x] Response formatting test
 
 ### USSD Integration
 
 **USSD Handler** (api/internal/channels/ussd/handler.go):
-- [ ] POST /public/ussd/callback endpoint
-- [ ] Session management
-- [ ] Input parsing
-- [ ] Response formatting
+- [x] POST /public/ussd/callback endpoint
+- [x] Session management
+- [x] Input parsing
+- [x] Response formatting
+- [x] Customer linking
 
 **Menu System** (api/internal/channels/ussd/menus.go):
-- [ ] MainMenu implementation
-- [ ] RewardsMenu implementation
-- [ ] BalanceMenu implementation
-- [ ] RedeemMenu implementation
-- [ ] Menu navigation
+- [x] MainMenu implementation
+- [x] RewardsMenu implementation
+- [x] BalanceMenu implementation
+- [x] RedeemMenu implementation
+- [x] Menu navigation
+- [x] Database integration
+
+**Response Builder** (api/internal/channels/ussd/response.go):
+- [x] FormatContinue (CON)
+- [x] FormatEnd (END)
+- [x] Menu formatting helpers
+- [x] Pagination helpers
+
+**Session Management** (api/internal/channels/ussd/session.go):
+- [x] GetOrCreateSession
+- [x] UpdateSession
+- [x] LinkCustomer
+- [x] Session data management
 
 **Tests**:
-- [ ] Menu navigation tests
-- [ ] Session management tests
-- [ ] Input validation tests
+- [x] Menu navigation tests
+- [x] Session management tests
+- [x] Input validation tests
+- [x] Response formatting tests
+- [x] Phone number normalization tests
+
+**Integration**:
+- [x] Router updated with channel handlers
+- [x] Config updated with WhatsApp credentials
+- [x] Environment variables documented
+- [x] Setup guide created (CHANNELS_SETUP.md)
 
 ### Frontend - Complete Features
 
