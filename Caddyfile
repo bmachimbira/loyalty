@@ -1,0 +1,30 @@
+:80 {
+	# Health check endpoint
+	respond /health 200
+
+	# API routes
+	@api {
+		path /v1/*
+		path /public/*
+	}
+	reverse_proxy @api api:8080
+
+	# Web application (React SPA)
+	reverse_proxy web:80
+}
+
+# Production configuration example (commented out)
+# example.com {
+#     # API routes
+#     @api {
+#         path /v1/*
+#         path /public/*
+#     }
+#     reverse_proxy @api api:8080
+#
+#     # Web application
+#     reverse_proxy web:80
+#
+#     # Enable automatic HTTPS
+#     tls your-email@example.com
+# }
