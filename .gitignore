@@ -30,3 +30,26 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+*.local
+
+# sqlc generated files
+api/internal/db/*.go
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
