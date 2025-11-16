@@ -1,4 +1,4 @@
-.PHONY: help install dev build up down logs clean sqlc migrate test
+.PHONY: help install dev build up down logs clean sqlc migrate test tidy
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -116,3 +116,7 @@ db-shell: ## Open a PostgreSQL shell
 
 status: ## Show status of all services
 	docker-compose ps
+
+tidy: ## Run go mod tidy
+	cd api && go mod tidy
+	cd web && npm install

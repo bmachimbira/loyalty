@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
-	httputil "github.com/bmachimbira/loyalty/api/internal/http"
+	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/bmachimbira/loyalty/api/internal/rules"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"

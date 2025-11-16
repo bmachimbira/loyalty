@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 
-	httputil "github.com/bmachimbira/loyalty/api/internal/http"
+	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

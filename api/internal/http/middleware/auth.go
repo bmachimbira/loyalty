@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/bmachimbira/loyalty/api/internal/auth"
-	httputil "github.com/bmachimbira/loyalty/api/internal/http"
+	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/gin-gonic/gin"
 )
 
