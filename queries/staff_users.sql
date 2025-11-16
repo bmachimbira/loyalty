@@ -10,6 +10,11 @@ RETURNING *;
 SELECT * FROM staff_users
 WHERE tenant_id = $1 AND email = $2;
 
+-- name: GetStaffUserByEmailOnly :one
+SELECT * FROM staff_users
+WHERE email = $1
+LIMIT 1;
+
 -- name: GetStaffUserByID :one
 SELECT * FROM staff_users
 WHERE id = $1 AND tenant_id = $2;

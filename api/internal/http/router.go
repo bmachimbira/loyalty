@@ -37,6 +37,7 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 	rulesEngine := rules.NewEngine(pool, logger)
 
 	// Initialize handlers
+	authHandler := handlers.NewAuthHandler(pool, jwtSecret)
 	customersHandler := handlers.NewCustomersHandler(pool)
 	eventsHandler := handlers.NewEventsHandler(pool, rulesEngine, logger)
 	rulesHandler := handlers.NewRulesHandler(pool)
@@ -69,8 +70,18 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 		public.POST("/ussd/callback", ussdHandler.HandleCallback)
 	}
 
-	// V1 API routes (authenticated)
+	// V1 API routes
 	v1 := r.Group("/v1")
+
+	// Auth routes (no authentication required)
+	auth := v1.Group("/auth")
+	{
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.Refresh)
+		auth.GET("/me", middleware.RequireAuth(jwtSecret), authHandler.Me)
+	}
+
+	// Apply authentication middleware for all other v1 routes
 	v1.Use(middleware.RequireAuth(jwtSecret))
 	v1.Use(middleware.TenantContext(pool))
 	v1.Use(middleware.IdempotencyCheck())
