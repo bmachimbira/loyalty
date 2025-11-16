@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

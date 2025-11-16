@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
+	"github.com/bmachimbira/loyalty/api/internal/logging"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -18,11 +18,11 @@ type Engine struct {
 	queries   *db.Queries
 	evaluator *Evaluator
 	cache     *RuleCache
-	logger    *slog.Logger
+	logger    *logging.Logger
 }
 
 // NewEngine creates a new rules engine
-func NewEngine(pool *pgxpool.Pool, logger *slog.Logger) *Engine {
+func NewEngine(pool *pgxpool.Pool, logger *logging.Logger) *Engine {
 	queries := db.New(pool)
 	customOps := NewCustomOperators(pool)
 	evaluator := NewEvaluator(customOps)

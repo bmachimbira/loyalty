@@ -9,6 +9,8 @@ import (
 	"github.com/bmachimbira/loyalty/api/internal/channels/whatsapp"
 	"github.com/bmachimbira/loyalty/api/internal/http/handlers"
 	"github.com/bmachimbira/loyalty/api/internal/http/middleware"
+	"github.com/bmachimbira/loyalty/api/internal/logging"
+	"github.com/bmachimbira/loyalty/api/internal/rules"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,9 +32,13 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 	r.GET("/health", HealthCheck)
 	r.GET("/ready", ReadyCheck(pool))
 
+	// Initialize logger and rules engine
+	logger := logging.New()
+	rulesEngine := rules.NewEngine(pool, logger)
+
 	// Initialize handlers
 	customersHandler := handlers.NewCustomersHandler(pool)
-	eventsHandler := handlers.NewEventsHandler(pool)
+	eventsHandler := handlers.NewEventsHandler(pool, rulesEngine, logger)
 	rulesHandler := handlers.NewRulesHandler(pool)
 	rewardsHandler := handlers.NewRewardsHandler(pool)
 	issuancesHandler := handlers.NewIssuancesHandler(pool)

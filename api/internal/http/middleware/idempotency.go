@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"encoding/json"
 	"sync"
 	"time"
@@ -120,7 +119,9 @@ func (w *responseWriter) WriteJSON(obj interface{}) error {
 		return err
 	}
 	w.body = append(w.body, data...)
-	return w.ResponseWriter.WriteJSON(obj)
+	w.ResponseWriter.Header().Set("Content-Type", "application/json")
+	_, err = w.ResponseWriter.Write(data)
+	return err
 }
 
 // cleanupExpiredEntries removes expired entries from cache every hour

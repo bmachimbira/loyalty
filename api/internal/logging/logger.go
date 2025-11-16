@@ -110,7 +110,7 @@ func (l *Logger) WithContext(ctx context.Context) *slog.Logger {
 	}
 
 	if len(attrs) > 0 {
-		return l.Logger.With(attrs...)
+		return l.Logger.With(attrs)
 	}
 
 	return l.Logger

@@ -53,7 +53,7 @@ func (e *Engine) issueReward(ctx context.Context, rule db.Rule, event db.Event) 
 	if rule.CampaignID.Valid {
 		campaign, err := qtx.GetCampaignByID(ctx, db.GetCampaignByIDParams{
 			TenantID: event.TenantID,
-			ID:       rule.CampaignID.UUID,
+			ID:       rule.CampaignID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get campaign: %w", err)
@@ -61,7 +61,7 @@ func (e *Engine) issueReward(ctx context.Context, rule db.Rule, event db.Event) 
 
 		// If campaign has a budget, reserve funds
 		if campaign.BudgetID.Valid {
-			success, err := e.reserveBudget(ctx, tx, campaign.BudgetID.UUID, event.TenantID, reward.FaceValue)
+			success, err := e.reserveBudget(ctx, tx, campaign.BudgetID, event.TenantID, reward.FaceValue)
 			if err != nil {
 				return nil, fmt.Errorf("failed to reserve budget: %w", err)
 			}

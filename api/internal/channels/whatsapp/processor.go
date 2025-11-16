@@ -211,11 +211,7 @@ func (p *MessageProcessor) handleRewards(ctx context.Context, session *db.WaSess
 	}
 
 	// Get active rewards from catalog
-	rewards, err := p.queries.ListRewards(ctx, db.ListRewardsParams{
-		TenantID: session.TenantID,
-		Limit:    10,
-		Offset:   0,
-	})
+	rewards, err := p.queries.ListRewards(ctx, session.TenantID)
 	if err != nil {
 		return fmt.Errorf("failed to list rewards: %w", err)
 	}
@@ -232,7 +228,7 @@ func (p *MessageProcessor) handleRewards(ctx context.Context, session *db.WaSess
 		msg.WriteString(fmt.Sprintf("%d. *%s*\n", i+1, reward.Name))
 		msg.WriteString(fmt.Sprintf("   Type: %s\n", reward.Type))
 		if reward.Currency.Valid && reward.FaceValue.Valid {
-			msg.WriteString(fmt.Sprintf("   Value: %s %.2f\n", reward.Currency.String, reward.FaceValue.Float64))
+			msg.WriteString(fmt.Sprintf("   Value: %s %.2f\n", reward.Currency.String, reward.FaceValue))
 		}
 		msg.WriteString("\n")
 	}

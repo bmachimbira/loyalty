@@ -3,13 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
+	"github.com/bmachimbira/loyalty/api/internal/logging"
 	"github.com/bmachimbira/loyalty/api/internal/rules"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,11 +21,11 @@ type EventsHandler struct {
 	pool        *pgxpool.Pool
 	queries     *db.Queries
 	rulesEngine *rules.Engine
-	logger      *slog.Logger
+	logger      *logging.Logger
 }
 
 // NewEventsHandler creates a new events handler
-func NewEventsHandler(pool *pgxpool.Pool, rulesEngine *rules.Engine, logger *slog.Logger) *EventsHandler {
+func NewEventsHandler(pool *pgxpool.Pool, rulesEngine *rules.Engine, logger *logging.Logger) *EventsHandler {
 	return &EventsHandler{
 		pool:        pool,
 		queries:     db.New(pool),
@@ -103,7 +104,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 	} else if err != pgx.ErrNoRows {
 		// Unexpected error
 		h.logger.Error("failed to check idempotency", "error", err)
-		httputil.InternalServerError(c, "Failed to check idempotency", nil)
+		httputil.InternalError(c, "Failed to check idempotency")
 		return
 	}
 
@@ -128,7 +129,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		}
 	} else {
 		if err := occurredAt.Scan(time.Now()); err != nil {
-			httputil.InternalServerError(c, "Failed to set timestamp", nil)
+			httputil.InternalError(c, "Failed to set timestamp")
 			return
 		}
 	}
@@ -151,7 +152,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 	})
 	if err != nil {
 		h.logger.Error("failed to create event", "error", err)
-		httputil.InternalServerError(c, "Failed to create event", nil)
+		httputil.InternalError(c, "Failed to create event")
 		return
 	}
 
