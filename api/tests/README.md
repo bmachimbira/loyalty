@@ -174,8 +174,8 @@ func TestMyFeature(t *testing.T) {
 
 ## Documentation
 
-- [TESTING.md](../../TESTING.md) - Comprehensive testing guide
-- [TEST_SUMMARY.md](../../TEST_SUMMARY.md) - Implementation summary
+- [TESTING.md](../../docs/TESTING.md) - Comprehensive testing guide
+- [TEST_SUMMARY.md](../../docs/TEST_SUMMARY.md) - Implementation summary
 
 ## Support
 

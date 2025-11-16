@@ -543,6 +543,7 @@ WHERE id=$1 AND tenant_id=$2 AND status=$3;
 ```
 
 **docker-compose.yml (excerpt)**
+
 ```yaml
 services:
   db:
@@ -553,24 +554,24 @@ services:
       - dbdata:/var/lib/postgresql/data
 
   api:
-    build: ./api
+    build: ../api
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
-    depends_on: [db]
-    ports: ["8080:8080"]
+    depends_on: [ db ]
+    ports: [ "8080:8080" ]
 
   web:
-    build: ./web
-    depends_on: [api]
+    build: ../web
+    depends_on: [ api ]
 
   caddy:
     image: caddy:2
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - webdist:/srv/web
-    depends_on: [web, api]
-    ports: ["80:80"]
+    depends_on: [ web, api ]
+    ports: [ "80:80" ]
 
 volumes:
   dbdata:

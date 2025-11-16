@@ -53,3 +53,5 @@ api/internal/db/*.go
 # OS
 .DS_Store
 Thumbs.db
+
+.idea/
