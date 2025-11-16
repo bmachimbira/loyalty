@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/bmachimbira/loyalty/api/internal/auth"
+	"github.com/joho/godotenv"
 )
 
 // Config holds all application configuration
@@ -23,6 +24,12 @@ type Config struct {
 
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
+	// Load .env file if it exists (ignore error if file doesn't exist)
+	// Try current directory first, then parent directory (for project root)
+	if err := godotenv.Load(); err != nil {
+		_ = godotenv.Load("../.env")
+	}
+
 	cfg := &Config{
 		DatabaseURL:           os.Getenv("DATABASE_URL"),
 		JWTSecret:             os.Getenv("JWT_SECRET"),
