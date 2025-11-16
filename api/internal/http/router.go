@@ -4,9 +4,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/bmachimbira/loyalty/api/internal/analytics"
 	"github.com/bmachimbira/loyalty/api/internal/auth"
 	"github.com/bmachimbira/loyalty/api/internal/channels/ussd"
 	"github.com/bmachimbira/loyalty/api/internal/channels/whatsapp"
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/http/handlers"
 	"github.com/bmachimbira/loyalty/api/internal/http/middleware"
 	"github.com/bmachimbira/loyalty/api/internal/logging"
@@ -36,8 +38,15 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 	logger := logging.New()
 	rulesEngine := rules.NewEngine(pool, logger)
 
+	// Initialize database queries
+	queries := db.New(pool)
+
+	// Initialize services
+	authService := auth.NewService(queries, jwtSecret)
+	analyticsService := analytics.NewService(queries, logger.Logger)
+
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(pool, jwtSecret)
+	authHandler := handlers.NewAuthHandler(authService)
 	customersHandler := handlers.NewCustomersHandler(pool)
 	eventsHandler := handlers.NewEventsHandler(pool, rulesEngine, logger)
 	rulesHandler := handlers.NewRulesHandler(pool)
@@ -45,6 +54,7 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 	issuancesHandler := handlers.NewIssuancesHandler(pool)
 	budgetsHandler := handlers.NewBudgetsHandler(pool)
 	campaignsHandler := handlers.NewCampaignsHandler(pool)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
 
 	// Initialize channel handlers
 	waHandler := whatsapp.NewHandler(
@@ -154,6 +164,12 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 			campaigns.GET("", campaignsHandler.List)
 			campaigns.GET("/:id", campaignsHandler.Get)
 			campaigns.PATCH("/:id", middleware.RequireRole("owner", "admin"), campaignsHandler.Update)
+		}
+
+		// Analytics API
+		analytics := tenants.Group("/analytics")
+		{
+			analytics.GET("/dashboard", analyticsHandler.GetDashboardStats)
 		}
 	}
 

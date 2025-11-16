@@ -1,20 +1,27 @@
 package handlers
 
 import (
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
+	"github.com/bmachimbira/loyalty/api/internal/issuance"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // IssuancesHandler handles issuance-related API endpoints
 type IssuancesHandler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	service *issuance.Service
 }
 
 // NewIssuancesHandler creates a new issuances handler
 func NewIssuancesHandler(pool *pgxpool.Pool) *IssuancesHandler {
-	return &IssuancesHandler{pool: pool}
+	queries := db.New(pool)
+	return &IssuancesHandler{
+		pool:    pool,
+		service: issuance.NewService(queries),
+	}
 }
 
 // RedeemIssuanceRequest represents the request to redeem an issuance
@@ -37,11 +44,15 @@ func (h *IssuancesHandler) List(c *gin.Context) {
 	customerID := c.Query("customer_id")
 	status := c.Query("status")
 
-	if customerID != "" {
-		if err := httputil.ValidateUUID(customerID); err != nil {
-			httputil.BadRequest(c, "Invalid customer ID", nil)
-			return
-		}
+	// Customer ID is required for listing issuances
+	if customerID == "" {
+		httputil.BadRequest(c, "customer_id query parameter is required", nil)
+		return
+	}
+
+	if err := httputil.ValidateUUID(customerID); err != nil {
+		httputil.BadRequest(c, "Invalid customer ID", nil)
+		return
 	}
 
 	// Validate status if provided
@@ -60,10 +71,48 @@ func (h *IssuancesHandler) List(c *gin.Context) {
 		}
 	}
 
-	// TODO: Once sqlc is generated, use queries.ListIssuances()
+	// Parse UUIDs
+	var tenantUUID, customerUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := customerUUID.Scan(customerID); err != nil {
+		httputil.BadRequest(c, "Invalid customer ID format", nil)
+		return
+	}
+
+	// List issuances using service
+	issuances, total, err := h.service.ListIssuancesByCustomer(c.Request.Context(), tenantUUID, customerUUID, limit, offset)
+	if err != nil {
+		httputil.InternalError(c, "Failed to list issuances")
+		return
+	}
+
+	// Format response
+	issuancesList := make([]gin.H, len(issuances))
+	for i, issuance := range issuances {
+		issuancesList[i] = gin.H{
+			"id":           formatUUID(issuance.ID),
+			"tenant_id":    formatUUID(issuance.TenantID),
+			"customer_id":  formatUUID(issuance.CustomerID),
+			"campaign_id":  formatUUID(issuance.CampaignID),
+			"reward_id":    formatUUID(issuance.RewardID),
+			"status":       issuance.Status,
+			"code":         issuance.Code.String,
+			"external_ref": issuance.ExternalRef.String,
+			"currency":     issuance.Currency.String,
+			"cost_amount":  issuance.CostAmount.Int.String(),
+			"face_amount":  issuance.FaceAmount.Int.String(),
+			"issued_at":    formatTimestamp(issuance.IssuedAt),
+			"expires_at":   formatTimestamp(issuance.ExpiresAt),
+			"redeemed_at":  formatTimestamp(issuance.RedeemedAt),
+		}
+	}
+
 	c.JSON(200, gin.H{
-		"issuances": []gin.H{},
-		"total":     0,
+		"issuances": issuancesList,
+		"total":     total,
 		"limit":     limit,
 		"offset":    offset,
 		"filters": gin.H{
@@ -88,14 +137,39 @@ func (h *IssuancesHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.GetIssuance()
+	// Parse UUIDs
+	var tenantUUID, issuanceUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := issuanceUUID.Scan(issuanceID); err != nil {
+		httputil.BadRequest(c, "Invalid issuance ID format", nil)
+		return
+	}
+
+	// Get issuance using service
+	issuance, err := h.service.GetIssuanceByID(c.Request.Context(), issuanceUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Issuance not found")
+		return
+	}
+
 	c.JSON(200, gin.H{
-		"id":          issuanceID,
-		"tenant_id":   tenantID,
-		"customer_id": uuid.New().String(),
-		"reward_id":   uuid.New().String(),
-		"state":       "issued",
-		"created_at":  "2025-11-14T00:00:00Z",
+		"id":           formatUUID(issuance.ID),
+		"tenant_id":    formatUUID(issuance.TenantID),
+		"customer_id":  formatUUID(issuance.CustomerID),
+		"campaign_id":  formatUUID(issuance.CampaignID),
+		"reward_id":    formatUUID(issuance.RewardID),
+		"status":       issuance.Status,
+		"code":         issuance.Code.String,
+		"external_ref": issuance.ExternalRef.String,
+		"currency":     issuance.Currency.String,
+		"cost_amount":  issuance.CostAmount.Int.String(),
+		"face_amount":  issuance.FaceAmount.Int.String(),
+		"issued_at":    formatTimestamp(issuance.IssuedAt),
+		"expires_at":   formatTimestamp(issuance.ExpiresAt),
+		"redeemed_at":  formatTimestamp(issuance.RedeemedAt),
 	})
 }
 

@@ -2,15 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
+	"github.com/bmachimbira/loyalty/api/internal/event"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/bmachimbira/loyalty/api/internal/logging"
 	"github.com/bmachimbira/loyalty/api/internal/rules"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,15 +19,18 @@ import (
 type EventsHandler struct {
 	pool        *pgxpool.Pool
 	queries     *db.Queries
+	service     *event.Service
 	rulesEngine *rules.Engine
 	logger      *logging.Logger
 }
 
 // NewEventsHandler creates a new events handler
 func NewEventsHandler(pool *pgxpool.Pool, rulesEngine *rules.Engine, logger *logging.Logger) *EventsHandler {
+	queries := db.New(pool)
 	return &EventsHandler{
 		pool:        pool,
-		queries:     db.New(pool),
+		queries:     queries,
+		service:     event.NewService(queries),
 		rulesEngine: rulesEngine,
 		logger:      logger,
 	}
@@ -194,15 +196,10 @@ func (h *EventsHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.GetEvent()
-	c.JSON(200, gin.H{
-		"id":          eventID,
-		"tenant_id":   tenantID,
-		"customer_id": uuid.New().String(),
-		"event_type":  "purchase",
-		"metadata":    gin.H{},
-		"created_at":  "2025-11-14T00:00:00Z",
-	})
+	// Note: There's no GetEventByID query in the database
+	// Events are typically retrieved by idempotency key or listed by customer
+	httputil.NotFound(c, "Event retrieval by ID not implemented. Use idempotency key or list by customer instead")
+	return
 }
 
 // List handles GET /v1/tenants/:tid/events
@@ -218,17 +215,59 @@ func (h *EventsHandler) List(c *gin.Context) {
 	offset := c.DefaultQuery("offset", "0")
 	customerID := c.Query("customer_id")
 
-	if customerID != "" {
-		if err := httputil.ValidateUUID(customerID); err != nil {
-			httputil.BadRequest(c, "Invalid customer ID", nil)
-			return
+	// Customer ID is required for listing events
+	if customerID == "" {
+		httputil.BadRequest(c, "customer_id query parameter is required", nil)
+		return
+	}
+
+	if err := httputil.ValidateUUID(customerID); err != nil {
+		httputil.BadRequest(c, "Invalid customer ID", nil)
+		return
+	}
+
+	// Parse UUIDs
+	var tenantUUID, customerUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := customerUUID.Scan(customerID); err != nil {
+		httputil.BadRequest(c, "Invalid customer ID format", nil)
+		return
+	}
+
+	// List events using service
+	events, total, err := h.service.ListEventsByCustomer(c.Request.Context(), tenantUUID, customerUUID, limit, offset)
+	if err != nil {
+		httputil.InternalError(c, "Failed to list events")
+		return
+	}
+
+	// Format response
+	eventsList := make([]gin.H, len(events))
+	for i, event := range events {
+		var properties map[string]interface{}
+		if len(event.Properties) > 0 {
+			json.Unmarshal(event.Properties, &properties)
+		}
+
+		eventsList[i] = gin.H{
+			"id":              formatUUID(event.ID),
+			"tenant_id":       formatUUID(event.TenantID),
+			"customer_id":     formatUUID(event.CustomerID),
+			"event_type":      event.EventType,
+			"properties":      properties,
+			"occurred_at":     formatTimestamp(event.OccurredAt),
+			"source":          event.Source,
+			"idempotency_key": event.IdempotencyKey,
+			"created_at":      formatTimestamp(event.CreatedAt),
 		}
 	}
 
-	// TODO: Once sqlc is generated, use queries.ListEvents()
 	c.JSON(200, gin.H{
-		"events": []gin.H{},
-		"total":  0,
+		"events": eventsList,
+		"total":  total,
 		"limit":  limit,
 		"offset": offset,
 		"filters": gin.H{
@@ -279,22 +318,4 @@ func formatEventResponse(event db.Event, issuances []db.Issuance) gin.H {
 	}
 
 	return response
-}
-
-// formatUUID converts pgtype.UUID to string
-func formatUUID(uuid pgtype.UUID) string {
-	if !uuid.Valid {
-		return ""
-	}
-	b := uuid.Bytes
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
-
-// formatTimestamp converts pgtype.Timestamptz to ISO8601 string
-func formatTimestamp(ts pgtype.Timestamptz) string {
-	if !ts.Valid {
-		return ""
-	}
-	return ts.Time.Format(time.RFC3339)
 }

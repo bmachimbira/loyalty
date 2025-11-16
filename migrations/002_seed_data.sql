@@ -20,19 +20,19 @@ INSERT INTO tenants (id, name, country_code, default_ccy, theme) VALUES
 INSERT INTO staff_users (tenant_id, email, full_name, role, pwd_hash) VALUES
   -- Owner: full access
   ('00000000-0000-0000-0000-000000000001', 'owner@demoshop.zw', 'Demo Owner', 'owner',
-   '$2a$10$rXrZvQJzEzKgEqZhKp5Yn.j3KzC9JYz8qEUiQP.xVQqLQWp3sHZ7G'),
+   '$2a$10$Bu.s4sJvQcW9N.ta0oYb0OGBcg1Zcw9H3Djgj6Yk7chtHuAT1WXoG'),
 
   -- Admin: manage rules, budgets, rewards
   ('00000000-0000-0000-0000-000000000001', 'admin@demoshop.zw', 'Demo Admin', 'admin',
-   '$2a$10$rXrZvQJzEzKgEqZhKp5Yn.j3KzC9JYz8qEUiQP.xVQqLQWp3sHZ7G'),
+   '$2a$10$Bu.s4sJvQcW9N.ta0oYb0OGBcg1Zcw9H3Djgj6Yk7chtHuAT1WXoG'),
 
   -- Staff: basic operations (redeem, view customers)
   ('00000000-0000-0000-0000-000000000001', 'staff@demoshop.zw', 'Demo Staff', 'staff',
-   '$2a$10$rXrZvQJzEzKgEqZhKp5Yn.j3KzC9JYz8qEUiQP.xVQqLQWp3sHZ7G'),
+   '$2a$10$Bu.s4sJvQcW9N.ta0oYb0OGBcg1Zcw9H3Djgj6Yk7chtHuAT1WXoG'),
 
   -- Viewer: read-only access
   ('00000000-0000-0000-0000-000000000001', 'viewer@demoshop.zw', 'Demo Viewer', 'viewer',
-   '$2a$10$rXrZvQJzEzKgEqZhKp5Yn.j3KzC9JYz8qEUiQP.xVQqLQWp3sHZ7G');
+   '$2a$10$Bu.s4sJvQcW9N.ta0oYb0OGBcg1Zcw9H3Djgj6Yk7chtHuAT1WXoG');
 
 -- =============================================================================
 -- SAMPLE CUSTOMERS

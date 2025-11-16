@@ -1,26 +1,22 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/bmachimbira/loyalty/api/internal/auth"
-	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	pool      *pgxpool.Pool
-	queries   *db.Queries
-	jwtSecret string
+	authService *auth.Service
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(pool *pgxpool.Pool, jwtSecret string) *AuthHandler {
+func NewAuthHandler(authService *auth.Service) *AuthHandler {
 	return &AuthHandler{
-		pool:      pool,
-		queries:   db.New(pool),
-		jwtSecret: jwtSecret,
+		authService: authService,
 	}
 }
 
@@ -60,54 +56,27 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Find user by email (across all tenants)
-	user, err := h.queries.GetStaffUserByEmailOnly(c.Request.Context(), req.Email)
+	// Authenticate user
+	result, err := h.authService.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		httputil.Unauthorized(c, "Invalid email or password")
-		return
-	}
-
-	// Verify password
-	if err := auth.ComparePassword(user.PwdHash, req.Password); err != nil {
-		httputil.Unauthorized(c, "Invalid email or password")
-		return
-	}
-
-	// Generate tokens
-	accessToken, err := auth.GenerateToken(
-		user.ID.String(),
-		user.TenantID.String(),
-		user.Email,
-		user.Role,
-		h.jwtSecret,
-	)
-	if err != nil {
-		httputil.InternalError(c, "Failed to generate access token")
-		return
-	}
-
-	refreshToken, err := auth.CreateRefreshToken(
-		user.ID.String(),
-		user.TenantID.String(),
-		user.Email,
-		user.Role,
-		h.jwtSecret,
-	)
-	if err != nil {
-		httputil.InternalError(c, "Failed to generate refresh token")
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			httputil.Unauthorized(c, "Invalid email or password")
+			return
+		}
+		httputil.InternalError(c, "Failed to authenticate")
 		return
 	}
 
 	c.JSON(200, LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    900, // 15 minutes
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		ExpiresIn:    result.ExpiresIn,
 		User: UserInfo{
-			ID:       user.ID.String(),
-			Email:    user.Email,
-			FullName: user.FullName,
-			Role:     user.Role,
-			TenantID: user.TenantID.String(),
+			ID:       result.User.ID,
+			Email:    result.User.Email,
+			FullName: result.User.FullName,
+			Role:     result.User.Role,
+			TenantID: result.User.TenantID,
 		},
 	})
 }
@@ -121,7 +90,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	// Refresh the token
-	tokenPair, err := auth.RefreshAccessToken(req.RefreshToken, h.jwtSecret)
+	tokenPair, err := h.authService.RefreshToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		httputil.Unauthorized(c, "Invalid or expired refresh token")
 		return
@@ -135,13 +104,19 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	// Extract user info from context (set by RequireAuth middleware)
 	userID, _ := c.Get("user_id")
 	tenantID, _ := c.Get("tenant_id")
-	email, _ := c.Get("email")
-	role, _ := c.Get("role")
+
+	// Get fresh user info from database
+	userInfo, err := h.authService.GetUserInfo(c.Request.Context(), userID.(string), tenantID.(string))
+	if err != nil {
+		httputil.Unauthorized(c, "User not found")
+		return
+	}
 
 	c.JSON(200, UserInfo{
-		ID:       userID.(string),
-		Email:    email.(string),
-		Role:     role.(string),
-		TenantID: tenantID.(string),
+		ID:       userInfo.ID,
+		Email:    userInfo.Email,
+		FullName: userInfo.FullName,
+		Role:     userInfo.Role,
+		TenantID: userInfo.TenantID,
 	})
 }

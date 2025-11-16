@@ -1,20 +1,29 @@
 package handlers
 
 import (
+	"time"
+
+	"github.com/bmachimbira/loyalty/api/internal/campaign"
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CampaignsHandler handles campaign-related API endpoints
 type CampaignsHandler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	service *campaign.Service
 }
 
 // NewCampaignsHandler creates a new campaigns handler
 func NewCampaignsHandler(pool *pgxpool.Pool) *CampaignsHandler {
-	return &CampaignsHandler{pool: pool}
+	queries := db.New(pool)
+	return &CampaignsHandler{
+		pool:    pool,
+		service: campaign.NewService(queries),
+	}
 }
 
 // CreateCampaignRequest represents the request to create a campaign
@@ -71,16 +80,62 @@ func (h *CampaignsHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.CreateCampaign()
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// Prepare parameters
+	var startAt, endAt pgtype.Timestamptz
+	if req.StartAt != nil {
+		startTime, err := time.Parse(time.RFC3339, *req.StartAt)
+		if err != nil {
+			httputil.BadRequest(c, "Invalid start_at format", nil)
+			return
+		}
+		startAt = pgtype.Timestamptz{Time: startTime, Valid: true}
+	}
+	if req.EndAt != nil {
+		endTime, err := time.Parse(time.RFC3339, *req.EndAt)
+		if err != nil {
+			httputil.BadRequest(c, "Invalid end_at format", nil)
+			return
+		}
+		endAt = pgtype.Timestamptz{Time: endTime, Valid: true}
+	}
+
+	var budgetID pgtype.UUID
+	if req.BudgetID != nil {
+		if err := budgetID.Scan(*req.BudgetID); err != nil {
+			httputil.BadRequest(c, "Invalid budget ID format", nil)
+			return
+		}
+	}
+
+	// Create campaign using service
+	campaign, err := h.service.CreateCampaign(c.Request.Context(), db.CreateCampaignParams{
+		TenantID: tenantUUID,
+		Name:     req.Name,
+		StartAt:  startAt,
+		EndAt:    endAt,
+		BudgetID: budgetID,
+		Status:   req.Status,
+	})
+	if err != nil {
+		httputil.InternalError(c, "Failed to create campaign")
+		return
+	}
+
 	c.JSON(201, gin.H{
-		"id":         uuid.New().String(),
-		"tenant_id":  tenantID,
-		"name":       req.Name,
-		"start_at":   req.StartAt,
-		"end_at":     req.EndAt,
-		"budget_id":  req.BudgetID,
-		"status":     req.Status,
-		"created_at": "2025-11-14T00:00:00Z",
+		"id":         formatUUID(campaign.ID),
+		"tenant_id":  formatUUID(campaign.TenantID),
+		"name":       campaign.Name,
+		"start_at":   formatTimestamp(campaign.StartAt),
+		"end_at":     formatTimestamp(campaign.EndAt),
+		"budget_id":  formatUUID(campaign.BudgetID),
+		"status":     campaign.Status,
 	})
 }
 
@@ -107,10 +162,37 @@ func (h *CampaignsHandler) List(c *gin.Context) {
 		}
 	}
 
-	// TODO: Once sqlc is generated, use queries.ListCampaigns()
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// List campaigns using service
+	campaigns, total, err := h.service.ListCampaigns(c.Request.Context(), tenantUUID, "50", "0", status)
+	if err != nil {
+		httputil.InternalError(c, "Failed to list campaigns")
+		return
+	}
+
+	// Format response
+	campaignsList := make([]gin.H, len(campaigns))
+	for i, campaign := range campaigns {
+		campaignsList[i] = gin.H{
+			"id":         formatUUID(campaign.ID),
+			"tenant_id":  formatUUID(campaign.TenantID),
+			"name":       campaign.Name,
+			"start_at":   formatTimestamp(campaign.StartAt),
+			"end_at":     formatTimestamp(campaign.EndAt),
+			"budget_id":  formatUUID(campaign.BudgetID),
+			"status":     campaign.Status,
+		}
+	}
+
 	c.JSON(200, gin.H{
-		"campaigns": []gin.H{},
-		"total":     0,
+		"campaigns": campaignsList,
+		"total":     total,
 		"filters": gin.H{
 			"status": status,
 		},
@@ -132,16 +214,32 @@ func (h *CampaignsHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.GetCampaign()
+	// Parse UUIDs
+	var tenantUUID, campaignUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := campaignUUID.Scan(campaignID); err != nil {
+		httputil.BadRequest(c, "Invalid campaign ID format", nil)
+		return
+	}
+
+	// Get campaign using service
+	campaign, err := h.service.GetCampaignByID(c.Request.Context(), campaignUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Campaign not found")
+		return
+	}
+
 	c.JSON(200, gin.H{
-		"id":         campaignID,
-		"tenant_id":  tenantID,
-		"name":       "Sample Campaign",
-		"start_at":   nil,
-		"end_at":     nil,
-		"budget_id":  nil,
-		"status":     "active",
-		"created_at": "2025-11-14T00:00:00Z",
+		"id":         formatUUID(campaign.ID),
+		"tenant_id":  formatUUID(campaign.TenantID),
+		"name":       campaign.Name,
+		"start_at":   formatTimestamp(campaign.StartAt),
+		"end_at":     formatTimestamp(campaign.EndAt),
+		"budget_id":  formatUUID(campaign.BudgetID),
+		"status":     campaign.Status,
 	})
 }
 
@@ -187,10 +285,92 @@ func (h *CampaignsHandler) Update(c *gin.Context) {
 		}
 	}
 
-	// TODO: Once sqlc is generated, use queries.UpdateCampaign()
+	// Parse UUIDs
+	var tenantUUID, campaignUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := campaignUUID.Scan(campaignID); err != nil {
+		httputil.BadRequest(c, "Invalid campaign ID format", nil)
+		return
+	}
+
+	// Get current campaign to merge updates
+	currentCampaign, err := h.service.GetCampaignByID(c.Request.Context(), campaignUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Campaign not found")
+		return
+	}
+
+	// Prepare update parameters
+	name := currentCampaign.Name
+	if req.Name != nil {
+		name = *req.Name
+	}
+
+	startAt := currentCampaign.StartAt
+	if req.StartAt != nil {
+		startTime, err := time.Parse(time.RFC3339, *req.StartAt)
+		if err != nil {
+			httputil.BadRequest(c, "Invalid start_at format", nil)
+			return
+		}
+		startAt = pgtype.Timestamptz{Time: startTime, Valid: true}
+	}
+
+	endAt := currentCampaign.EndAt
+	if req.EndAt != nil {
+		endTime, err := time.Parse(time.RFC3339, *req.EndAt)
+		if err != nil {
+			httputil.BadRequest(c, "Invalid end_at format", nil)
+			return
+		}
+		endAt = pgtype.Timestamptz{Time: endTime, Valid: true}
+	}
+
+	budgetID := currentCampaign.BudgetID
+	if req.BudgetID != nil {
+		if err := budgetID.Scan(*req.BudgetID); err != nil {
+			httputil.BadRequest(c, "Invalid budget ID format", nil)
+			return
+		}
+	}
+
+	status := currentCampaign.Status
+	if req.Status != nil {
+		status = *req.Status
+	}
+
+	// Update campaign using service
+	err = h.service.UpdateCampaign(c.Request.Context(), db.UpdateCampaignParams{
+		ID:       campaignUUID,
+		TenantID: tenantUUID,
+		Name:     name,
+		StartAt:  startAt,
+		EndAt:    endAt,
+		BudgetID: budgetID,
+		Status:   status,
+	})
+	if err != nil {
+		httputil.InternalError(c, "Failed to update campaign")
+		return
+	}
+
+	// Get updated campaign
+	campaign, err := h.service.GetCampaignByID(c.Request.Context(), campaignUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to get updated campaign")
+		return
+	}
+
 	c.JSON(200, gin.H{
-		"id":         campaignID,
-		"tenant_id":  tenantID,
-		"updated_at": "2025-11-14T00:00:00Z",
+		"id":         formatUUID(campaign.ID),
+		"tenant_id":  formatUUID(campaign.TenantID),
+		"name":       campaign.Name,
+		"start_at":   formatTimestamp(campaign.StartAt),
+		"end_at":     formatTimestamp(campaign.EndAt),
+		"budget_id":  formatUUID(campaign.BudgetID),
+		"status":     campaign.Status,
 	})
 }

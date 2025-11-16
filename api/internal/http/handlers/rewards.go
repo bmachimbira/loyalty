@@ -1,20 +1,29 @@
 package handlers
 
 import (
+	"encoding/json"
+
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
+	"github.com/bmachimbira/loyalty/api/internal/rewardcatalog"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RewardsHandler handles reward catalog API endpoints
 type RewardsHandler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	service *rewardcatalog.Service
 }
 
 // NewRewardsHandler creates a new rewards handler
 func NewRewardsHandler(pool *pgxpool.Pool) *RewardsHandler {
-	return &RewardsHandler{pool: pool}
+	queries := db.New(pool)
+	return &RewardsHandler{
+		pool:    pool,
+		service: rewardcatalog.NewService(queries),
+	}
 }
 
 // CreateRewardRequest represents the request to create a reward
@@ -79,19 +88,82 @@ func (h *RewardsHandler) Create(c *gin.Context) {
 		}
 	}
 
-	// TODO: Once sqlc is generated, use queries.CreateReward()
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// Prepare parameters
+	var faceValue pgtype.Numeric
+	if req.FaceValue != nil {
+		if err := faceValue.Scan(*req.FaceValue); err != nil {
+			httputil.BadRequest(c, "Invalid face value", nil)
+			return
+		}
+	}
+
+	var currency pgtype.Text
+	if req.Currency != "" {
+		currency = pgtype.Text{String: req.Currency, Valid: true}
+	}
+
+	var supplierID pgtype.UUID
+	if req.SupplierID != nil {
+		if err := supplierID.Scan(*req.SupplierID); err != nil {
+			httputil.BadRequest(c, "Invalid supplier ID format", nil)
+			return
+		}
+	}
+
+	// Serialize metadata
+	var metadataJSON []byte
+	if req.Metadata != nil {
+		var err error
+		metadataJSON, err = json.Marshal(req.Metadata)
+		if err != nil {
+			httputil.BadRequest(c, "Invalid metadata format", nil)
+			return
+		}
+	} else {
+		metadataJSON = []byte("{}")
+	}
+
+	// Create reward using service
+	reward, err := h.service.CreateReward(c.Request.Context(), db.CreateRewardParams{
+		TenantID:   tenantUUID,
+		Name:       req.Name,
+		Type:       req.Type,
+		FaceValue:  faceValue,
+		Currency:   currency,
+		Inventory:  req.Inventory,
+		SupplierID: supplierID,
+		Metadata:   metadataJSON,
+		Active:     req.Active,
+	})
+	if err != nil {
+		httputil.InternalError(c, "Failed to create reward")
+		return
+	}
+
+	// Parse metadata back
+	var metadata map[string]interface{}
+	if len(reward.Metadata) > 0 {
+		json.Unmarshal(reward.Metadata, &metadata)
+	}
+
 	c.JSON(201, gin.H{
-		"id":          uuid.New().String(),
-		"tenant_id":   tenantID,
-		"name":        req.Name,
-		"type":        req.Type,
-		"face_value":  req.FaceValue,
-		"currency":    req.Currency,
-		"inventory":   req.Inventory,
-		"supplier_id": req.SupplierID,
-		"metadata":    req.Metadata,
-		"active":      req.Active,
-		"created_at":  "2025-11-14T00:00:00Z",
+		"id":          formatUUID(reward.ID),
+		"tenant_id":   formatUUID(reward.TenantID),
+		"name":        reward.Name,
+		"type":        reward.Type,
+		"face_value":  reward.FaceValue.Int.String(),
+		"currency":    reward.Currency.String,
+		"inventory":   reward.Inventory,
+		"supplier_id": formatUUID(reward.SupplierID),
+		"metadata":    metadata,
+		"active":      reward.Active,
 	})
 }
 
@@ -106,10 +178,45 @@ func (h *RewardsHandler) List(c *gin.Context) {
 	// Get filter params
 	activeOnly := c.DefaultQuery("active_only", "true")
 
-	// TODO: Once sqlc is generated, use queries.ListRewards()
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// List rewards using service
+	rewards, err := h.service.ListRewards(c.Request.Context(), tenantUUID, activeOnly == "true")
+	if err != nil {
+		httputil.InternalError(c, "Failed to list rewards")
+		return
+	}
+
+	// Format response
+	rewardsList := make([]gin.H, len(rewards))
+	for i, reward := range rewards {
+		var metadata map[string]interface{}
+		if len(reward.Metadata) > 0 {
+			json.Unmarshal(reward.Metadata, &metadata)
+		}
+
+		rewardsList[i] = gin.H{
+			"id":          formatUUID(reward.ID),
+			"tenant_id":   formatUUID(reward.TenantID),
+			"name":        reward.Name,
+			"type":        reward.Type,
+			"face_value":  reward.FaceValue.Int.String(),
+			"currency":    reward.Currency.String,
+			"inventory":   reward.Inventory,
+			"supplier_id": formatUUID(reward.SupplierID),
+			"metadata":    metadata,
+			"active":      reward.Active,
+		}
+	}
+
 	c.JSON(200, gin.H{
-		"rewards": []gin.H{},
-		"total":   0,
+		"rewards": rewardsList,
+		"total":   len(rewards),
 		"filters": gin.H{
 			"active_only": activeOnly,
 		},
@@ -131,17 +238,41 @@ func (h *RewardsHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.GetReward()
+	// Parse UUIDs
+	var tenantUUID, rewardUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := rewardUUID.Scan(rewardID); err != nil {
+		httputil.BadRequest(c, "Invalid reward ID format", nil)
+		return
+	}
+
+	// Get reward using service
+	reward, err := h.service.GetRewardByID(c.Request.Context(), rewardUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Reward not found")
+		return
+	}
+
+	// Parse metadata
+	var metadata map[string]interface{}
+	if len(reward.Metadata) > 0 {
+		json.Unmarshal(reward.Metadata, &metadata)
+	}
+
 	c.JSON(200, gin.H{
-		"id":         rewardID,
-		"tenant_id":  tenantID,
-		"name":       "Sample Reward",
-		"type":       "discount",
-		"face_value": 10.0,
-		"currency":   "USD",
-		"inventory":  "none",
-		"active":     true,
-		"created_at": "2025-11-14T00:00:00Z",
+		"id":          formatUUID(reward.ID),
+		"tenant_id":   formatUUID(reward.TenantID),
+		"name":        reward.Name,
+		"type":        reward.Type,
+		"face_value":  reward.FaceValue.Int.String(),
+		"currency":    reward.Currency.String,
+		"inventory":   reward.Inventory,
+		"supplier_id": formatUUID(reward.SupplierID),
+		"metadata":    metadata,
+		"active":      reward.Active,
 	})
 }
 
@@ -166,11 +297,49 @@ func (h *RewardsHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.UpdateReward()
+	// Parse UUIDs
+	var tenantUUID, rewardUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := rewardUUID.Scan(rewardID); err != nil {
+		httputil.BadRequest(c, "Invalid reward ID format", nil)
+		return
+	}
+
+	// For now, we only support updating the active status
+	if req.Active != nil {
+		err := h.service.UpdateRewardStatus(c.Request.Context(), rewardUUID, tenantUUID, *req.Active)
+		if err != nil {
+			httputil.InternalError(c, "Failed to update reward")
+			return
+		}
+	}
+
+	// Get updated reward
+	reward, err := h.service.GetRewardByID(c.Request.Context(), rewardUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to get updated reward")
+		return
+	}
+
+	// Parse metadata
+	var metadata map[string]interface{}
+	if len(reward.Metadata) > 0 {
+		json.Unmarshal(reward.Metadata, &metadata)
+	}
+
 	c.JSON(200, gin.H{
-		"id":         rewardID,
-		"tenant_id":  tenantID,
-		"updated_at": "2025-11-14T00:00:00Z",
+		"id":         formatUUID(reward.ID),
+		"tenant_id":  formatUUID(reward.TenantID),
+		"name":       reward.Name,
+		"type":       reward.Type,
+		"face_value": reward.FaceValue.Int.String(),
+		"currency":   reward.Currency.String,
+		"inventory":  reward.Inventory,
+		"metadata":   metadata,
+		"active":     reward.Active,
 	})
 }
 

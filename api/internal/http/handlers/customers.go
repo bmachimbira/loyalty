@@ -1,20 +1,27 @@
 package handlers
 
 import (
+	"github.com/bmachimbira/loyalty/api/internal/customer"
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CustomersHandler handles customer-related API endpoints
 type CustomersHandler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	service *customer.Service
 }
 
 // NewCustomersHandler creates a new customers handler
 func NewCustomersHandler(pool *pgxpool.Pool) *CustomersHandler {
-	return &CustomersHandler{pool: pool}
+	queries := db.New(pool)
+	return &CustomersHandler{
+		pool:    pool,
+		service: customer.NewService(queries),
+	}
 }
 
 // CreateCustomerRequest represents the request to create a customer
@@ -58,15 +65,31 @@ func (h *CustomersHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.CreateCustomer()
-	// For now, return a placeholder response
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// Create customer using service
+	customer, err := h.service.CreateCustomer(c.Request.Context(), db.CreateCustomerParams{
+		TenantID:    tenantUUID,
+		PhoneE164:   pgtype.Text{String: req.PhoneE164, Valid: req.PhoneE164 != ""},
+		ExternalRef: pgtype.Text{String: req.ExternalRef, Valid: req.ExternalRef != ""},
+	})
+	if err != nil {
+		httputil.InternalError(c, "Failed to create customer")
+		return
+	}
+
 	c.JSON(201, gin.H{
-		"id":           uuid.New().String(),
-		"tenant_id":    tenantID,
-		"phone_e164":   req.PhoneE164,
-		"external_ref": req.ExternalRef,
-		"status":       "active",
-		"created_at":   "2025-11-14T00:00:00Z",
+		"id":           formatUUID(customer.ID),
+		"tenant_id":    formatUUID(customer.TenantID),
+		"phone_e164":   customer.PhoneE164.String,
+		"external_ref": customer.ExternalRef.String,
+		"status":       customer.Status,
+		"created_at":   formatTimestamp(customer.CreatedAt),
 	})
 }
 
@@ -85,14 +108,31 @@ func (h *CustomersHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.GetCustomer()
+	// Parse UUIDs
+	var tenantUUID, customerUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := customerUUID.Scan(customerID); err != nil {
+		httputil.BadRequest(c, "Invalid customer ID format", nil)
+		return
+	}
+
+	// Get customer using service
+	customer, err := h.service.GetCustomerByID(c.Request.Context(), customerUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Customer not found")
+		return
+	}
+
 	c.JSON(200, gin.H{
-		"id":           customerID,
-		"tenant_id":    tenantID,
-		"phone_e164":   "+263771234567",
-		"external_ref": "CUST123",
-		"status":       "active",
-		"created_at":   "2025-11-14T00:00:00Z",
+		"id":           formatUUID(customer.ID),
+		"tenant_id":    formatUUID(customer.TenantID),
+		"phone_e164":   customer.PhoneE164.String,
+		"external_ref": customer.ExternalRef.String,
+		"status":       customer.Status,
+		"created_at":   formatTimestamp(customer.CreatedAt),
 	})
 }
 
@@ -112,10 +152,36 @@ func (h *CustomersHandler) List(c *gin.Context) {
 	phone := c.Query("phone")
 	externalRef := c.Query("external_ref")
 
-	// TODO: Once sqlc is generated, use queries.ListCustomers()
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// List customers using service
+	customers, total, err := h.service.ListCustomers(c.Request.Context(), tenantUUID, limit, offset)
+	if err != nil {
+		httputil.InternalError(c, "Failed to list customers")
+		return
+	}
+
+	// Format response
+	customersList := make([]gin.H, len(customers))
+	for i, customer := range customers {
+		customersList[i] = gin.H{
+			"id":           formatUUID(customer.ID),
+			"tenant_id":    formatUUID(customer.TenantID),
+			"phone_e164":   customer.PhoneE164.String,
+			"external_ref": customer.ExternalRef.String,
+			"status":       customer.Status,
+			"created_at":   formatTimestamp(customer.CreatedAt),
+		}
+	}
+
 	c.JSON(200, gin.H{
-		"customers": []gin.H{},
-		"total":     0,
+		"customers": customersList,
+		"total":     total,
 		"limit":     limit,
 		"offset":    offset,
 		"filters": gin.H{
@@ -158,11 +224,35 @@ func (h *CustomersHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.UpdateCustomerStatus()
+	// Parse UUIDs
+	var tenantUUID, customerUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := customerUUID.Scan(customerID); err != nil {
+		httputil.BadRequest(c, "Invalid customer ID format", nil)
+		return
+	}
+
+	// Update customer status using service
+	err := h.service.UpdateCustomerStatus(c.Request.Context(), customerUUID, tenantUUID, req.Status)
+	if err != nil {
+		httputil.InternalError(c, "Failed to update customer status")
+		return
+	}
+
+	// Get updated customer
+	customer, err := h.service.GetCustomerByID(c.Request.Context(), customerUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to get updated customer")
+		return
+	}
+
 	c.JSON(200, gin.H{
-		"id":         customerID,
-		"tenant_id":  tenantID,
-		"status":     req.Status,
-		"updated_at": "2025-11-14T00:00:00Z",
+		"id":         formatUUID(customer.ID),
+		"tenant_id":  formatUUID(customer.TenantID),
+		"status":     customer.Status,
+		"updated_at": formatTimestamp(customer.CreatedAt),
 	})
 }
