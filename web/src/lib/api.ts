@@ -126,10 +126,12 @@ export class APIClient {
 
   // Customer endpoints
   customers = {
-    list: (limit = 50, offset = 0) =>
-      this.request<PaginatedResponse<Customer>>(
+    list: async (limit = 50, offset = 0) => {
+      const response = await this.request<{ customers: Customer[]; total: number }>(
         `/tenants/${this.getTenantId()}/customers?limit=${limit}&offset=${offset}`
-      ),
+      );
+      return { data: response.customers, total: response.total, page: 0, limit };
+    },
     get: (id: string) =>
       this.request<Customer>(`/tenants/${this.getTenantId()}/customers/${id}`),
     create: (data: CreateCustomerDTO) =>
@@ -146,8 +148,10 @@ export class APIClient {
 
   // Reward endpoints
   rewards = {
-    list: () =>
-      this.request<Reward[]>(`/tenants/${this.getTenantId()}/reward-catalog`),
+    list: async () => {
+      const response = await this.request<{ rewards: Reward[] }>(`/tenants/${this.getTenantId()}/reward-catalog`);
+      return response.rewards;
+    },
     get: (id: string) =>
       this.request<Reward>(`/tenants/${this.getTenantId()}/reward-catalog/${id}`),
     create: (data: CreateRewardDTO) =>
@@ -169,8 +173,10 @@ export class APIClient {
 
   // Rule endpoints
   rules = {
-    list: () =>
-      this.request<Rule[]>(`/tenants/${this.getTenantId()}/rules`),
+    list: async () => {
+      const response = await this.request<{ rules: Rule[] }>(`/tenants/${this.getTenantId()}/rules`);
+      return response.rules;
+    },
     get: (id: string) =>
       this.request<Rule>(`/tenants/${this.getTenantId()}/rules/${id}`),
     create: (data: CreateRuleDTO) =>
@@ -191,8 +197,10 @@ export class APIClient {
 
   // Campaign endpoints
   campaigns = {
-    list: () =>
-      this.request<Campaign[]>(`/tenants/${this.getTenantId()}/campaigns`),
+    list: async () => {
+      const response = await this.request<{ campaigns: Campaign[] }>(`/tenants/${this.getTenantId()}/campaigns`);
+      return response.campaigns;
+    },
     get: (id: string) =>
       this.request<Campaign>(`/tenants/${this.getTenantId()}/campaigns/${id}`),
     create: (data: CreateCampaignDTO) =>
@@ -209,8 +217,10 @@ export class APIClient {
 
   // Budget endpoints
   budgets = {
-    list: () =>
-      this.request<Budget[]>(`/tenants/${this.getTenantId()}/budgets`),
+    list: async () => {
+      const response = await this.request<{ budgets: Budget[] }>(`/tenants/${this.getTenantId()}/budgets`);
+      return response.budgets;
+    },
     get: (id: string) =>
       this.request<Budget>(`/tenants/${this.getTenantId()}/budgets/${id}`),
     create: (data: CreateBudgetDTO) =>
@@ -227,17 +237,19 @@ export class APIClient {
 
   // Ledger endpoints
   ledger = {
-    list: (budgetId?: string) => {
+    list: async (budgetId?: string) => {
       const query = budgetId ? `?budget_id=${budgetId}` : '';
-      return this.request<LedgerEntry[]>(`/tenants/${this.getTenantId()}/ledger${query}`);
+      const response = await this.request<{ entries: LedgerEntry[] }>(`/tenants/${this.getTenantId()}/ledger${query}`);
+      return response.entries;
     },
   };
 
   // Issuance endpoints
   issuances = {
-    list: (customerId?: string) => {
+    list: async (customerId?: string) => {
       const query = customerId ? `?customer_id=${customerId}` : '';
-      return this.request<Issuance[]>(`/tenants/${this.getTenantId()}/issuances${query}`);
+      const response = await this.request<{ issuances: Issuance[] }>(`/tenants/${this.getTenantId()}/issuances${query}`);
+      return response.issuances;
     },
     get: (id: string) =>
       this.request<Issuance>(`/tenants/${this.getTenantId()}/issuances/${id}`),

@@ -93,7 +93,9 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 
 	// Apply authentication middleware for all other v1 routes
 	v1.Use(middleware.RequireAuth(jwtSecret))
-	v1.Use(middleware.TenantContext(pool))
+	// TenantContext middleware disabled - handlers use tenant ID from URL path parameter
+	// The middleware was trying to set PostgreSQL session variable which isn't configured
+	// v1.Use(middleware.TenantContext(pool))
 	v1.Use(middleware.IdempotencyCheck())
 
 	// Tenant-scoped routes

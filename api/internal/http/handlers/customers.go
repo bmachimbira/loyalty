@@ -148,10 +148,6 @@ func (h *CustomersHandler) List(c *gin.Context) {
 	limit := c.DefaultQuery("limit", "50")
 	offset := c.DefaultQuery("offset", "0")
 
-	// Get search params
-	phone := c.Query("phone")
-	externalRef := c.Query("external_ref")
-
 	// Parse tenant UUID
 	var tenantUUID pgtype.UUID
 	if err := tenantUUID.Scan(tenantID); err != nil {
@@ -180,14 +176,10 @@ func (h *CustomersHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"customers": customersList,
-		"total":     total,
-		"limit":     limit,
-		"offset":    offset,
-		"filters": gin.H{
-			"phone":        phone,
-			"external_ref": externalRef,
-		},
+		"data":   customersList,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
 	})
 }
 

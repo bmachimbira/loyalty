@@ -177,8 +177,10 @@ func (h *BudgetsHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"budgets": budgetsList,
-		"total":   len(budgets),
+		"data":  budgetsList,
+		"total": len(budgets),
+		"limit": 0,
+		"page":  0,
 	})
 }
 

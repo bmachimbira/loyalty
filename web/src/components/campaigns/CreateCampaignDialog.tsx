@@ -195,7 +195,6 @@ export function CreateCampaignDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">No budget</SelectItem>
                       {budgets.map((budget) => (
                         <SelectItem key={budget.id} value={budget.id}>
                           {budget.name} ({budget.currency})

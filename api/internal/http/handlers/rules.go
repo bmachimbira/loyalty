@@ -199,8 +199,10 @@ func (h *RulesHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"rules": rulesList,
+		"data":  rulesList,
 		"total": len(rules),
+		"limit": 0,
+		"page":  0,
 		"filters": gin.H{
 			"active_only": activeOnly,
 		},

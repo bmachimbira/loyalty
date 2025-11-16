@@ -20,13 +20,16 @@ export interface Reward {
   tenant_id: string;
   name: string;
   type: 'discount' | 'voucher_code' | 'points_credit' | 'external_voucher' | 'physical_item' | 'webhook_custom';
-  face_value: number | null;
-  currency: 'ZWG' | 'USD' | null;
+  face_value: number | string | null;
+  currency: 'ZWG' | 'USD' | string | null;
   expiry_days: number | null;
   active: boolean;
   inventory_total: number | null;
   inventory_used: number;
   config: Record<string, any> | null;
+  metadata?: Record<string, any>;
+  inventory?: string;
+  supplier_id?: string;
   created_at: string;
   updated_at: string;
 }

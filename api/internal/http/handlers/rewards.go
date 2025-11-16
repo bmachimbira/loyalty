@@ -221,11 +221,10 @@ func (h *RewardsHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"rewards": rewardsList,
-		"total":   len(rewards),
-		"filters": gin.H{
-			"active_only": activeOnly,
-		},
+		"data":  rewardsList,
+		"total": len(rewards),
+		"limit": 0,
+		"page":  0,
 	})
 }
 

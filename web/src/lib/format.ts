@@ -19,11 +19,18 @@ export function formatDateTime(dateString: string): string {
 }
 
 export function formatCurrency(
-  amount: number | null,
+  amount: number | string | null,
   currency: string | null = 'ZWG'
 ): string {
-  if (amount === null) return '-';
-  return `${currency || 'ZWG'} ${amount.toFixed(2)}`;
+  if (amount === null || amount === '<nil>' || amount === '') return '-';
+  
+  // Convert string to number if needed
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  
+  // Check if conversion resulted in NaN
+  if (isNaN(numAmount)) return '-';
+  
+  return `${currency || 'ZWG'} ${numAmount.toFixed(2)}`;
 }
 
 export function formatNumber(value: number | null): string {

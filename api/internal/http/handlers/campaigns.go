@@ -191,11 +191,10 @@ func (h *CampaignsHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"campaigns": campaignsList,
-		"total":     total,
-		"filters": gin.H{
-			"status": status,
-		},
+		"data":  campaignsList,
+		"total": total,
+		"limit": 50,
+		"page":  0,
 	})
 }
 
