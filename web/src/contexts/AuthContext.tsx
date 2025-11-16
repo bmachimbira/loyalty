@@ -21,19 +21,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem('auth_token');
     if (token) {
       api.setToken(token);
-      // In a real implementation, you would fetch the user profile here
-      // For now, we'll just mark as not loading
-      // TODO: Implement /v1/auth/me endpoint to fetch current user
+
+      // Fetch current user profile
+      api.auth.me()
+        .then((userInfo) => {
+          setUser({
+            id: userInfo.id,
+            email: userInfo.email,
+            full_name: userInfo.full_name,
+            role: userInfo.role as 'admin' | 'staff',
+            tenant_id: userInfo.tenant_id,
+          });
+          api.setTenantId(userInfo.tenant_id);
+        })
+        .catch((error) => {
+          console.error('Failed to fetch user profile:', error);
+          // Token is invalid, clear it
+          api.clearAuth();
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
       const response = await api.auth.login(email, password);
-      api.setToken(response.token);
+      api.setToken(response.access_token);
       api.setTenantId(response.user.tenant_id);
       setUser(response.user);
+
+      // Optionally store refresh token
+      if (response.refresh_token) {
+        localStorage.setItem('refresh_token', response.refresh_token);
+      }
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -42,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     api.clearAuth();
+    localStorage.removeItem('refresh_token');
     setUser(null);
   };
 

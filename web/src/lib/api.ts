@@ -115,6 +115,13 @@ export class APIClient {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       }),
+    me: () =>
+      this.request<{ id: string; email: string; full_name: string; role: string; tenant_id: string }>('/auth/me'),
+    refresh: (refreshToken: string) =>
+      this.request<{ access_token: string; refresh_token: string; expires_in: number }>('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      }),
   };
 
   // Customer endpoints

@@ -180,13 +180,14 @@ export interface User {
   id: string;
   tenant_id: string;
   email: string;
+  full_name: string;
   role: 'admin' | 'staff';
-  active: boolean;
-  created_at: string;
 }
 
 export interface LoginResponse {
-  token: string;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
   user: User;
 }
 
