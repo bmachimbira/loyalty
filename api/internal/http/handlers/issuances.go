@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"log/slog"
+
 	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/bmachimbira/loyalty/api/internal/issuance"
+	"github.com/bmachimbira/loyalty/api/internal/reward"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,16 +14,18 @@ import (
 
 // IssuancesHandler handles issuance-related API endpoints
 type IssuancesHandler struct {
-	pool    *pgxpool.Pool
-	service *issuance.Service
+	pool          *pgxpool.Pool
+	service       *issuance.Service
+	rewardService *reward.Service
 }
 
 // NewIssuancesHandler creates a new issuances handler
-func NewIssuancesHandler(pool *pgxpool.Pool) *IssuancesHandler {
+func NewIssuancesHandler(pool *pgxpool.Pool, logger *slog.Logger) *IssuancesHandler {
 	queries := db.New(pool)
 	return &IssuancesHandler{
-		pool:    pool,
-		service: issuance.NewService(queries),
+		pool:          pool,
+		service:       issuance.NewService(queries),
+		rewardService: reward.NewService(pool, queries),
 	}
 }
 
@@ -200,18 +205,51 @@ func (h *IssuancesHandler) Redeem(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated:
-	// 1. Verify issuance exists and is in 'issued' state
-	// 2. Validate OTP or staff PIN
-	// 3. Check expiry
-	// 4. Transition state to 'redeemed'
-	// 5. Charge budget
-	// 6. Create audit log entry
+	// Parse UUIDs
+	var tenantUUID, issuanceUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := issuanceUUID.Scan(issuanceID); err != nil {
+		httputil.BadRequest(c, "Invalid issuance ID format", nil)
+		return
+	}
+
+	// Get issuance to verify state
+	iss, err := h.service.GetIssuanceByID(c.Request.Context(), issuanceUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Issuance not found")
+		return
+	}
+
+	// Verify issuance is in issued state
+	if iss.Status != "issued" {
+		httputil.BadRequest(c, "Issuance must be in 'issued' state to redeem", nil)
+		return
+	}
+
+	// TODO: Validate OTP or staff PIN (requires OTP/PIN validation logic)
+	// TODO: Check expiry (requires expiry validation logic)
+
+	// Update issuance status to redeemed
+	err = h.service.UpdateIssuanceStatus(c.Request.Context(), issuanceUUID, tenantUUID, "issued", "redeemed")
+	if err != nil {
+		httputil.InternalError(c, "Failed to redeem issuance")
+		return
+	}
+
+	// Get updated issuance
+	updatedIss, err := h.service.GetIssuanceByID(c.Request.Context(), issuanceUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to get updated issuance")
+		return
+	}
 
 	c.JSON(200, gin.H{
-		"id":          issuanceID,
-		"state":       "redeemed",
-		"redeemed_at": "2025-11-14T00:00:00Z",
+		"id":          formatUUID(updatedIss.ID),
+		"status":      updatedIss.Status,
+		"redeemed_at": formatTimestamp(updatedIss.RedeemedAt),
 	})
 }
 
@@ -230,15 +268,33 @@ func (h *IssuancesHandler) Cancel(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated:
-	// 1. Verify issuance exists and is in cancellable state
-	// 2. Transition state to 'cancelled'
-	// 3. Release reserved budget
-	// 4. Create audit log entry
+	// Parse UUIDs
+	var tenantUUID, issuanceUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := issuanceUUID.Scan(issuanceID); err != nil {
+		httputil.BadRequest(c, "Invalid issuance ID format", nil)
+		return
+	}
+
+	// Use reward service to cancel issuance (it handles budget release)
+	err := h.rewardService.CancelIssuance(c.Request.Context(), issuanceUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to cancel issuance")
+		return
+	}
+
+	// Get updated issuance
+	updatedIss, err := h.service.GetIssuanceByID(c.Request.Context(), issuanceUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to get updated issuance")
+		return
+	}
 
 	c.JSON(200, gin.H{
-		"id":          issuanceID,
-		"state":       "cancelled",
-		"cancelled_at": "2025-11-14T00:00:00Z",
+		"id":     formatUUID(updatedIss.ID),
+		"status": updatedIss.Status,
 	})
 }

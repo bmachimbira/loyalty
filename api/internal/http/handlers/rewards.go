@@ -1,7 +1,11 @@
 package handlers
 
 import (
+	"bufio"
+	"encoding/csv"
 	"encoding/json"
+	"io"
+	"strings"
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
@@ -15,6 +19,7 @@ import (
 type RewardsHandler struct {
 	pool    *pgxpool.Pool
 	service *rewardcatalog.Service
+	queries *db.Queries
 }
 
 // NewRewardsHandler creates a new rewards handler
@@ -23,6 +28,7 @@ func NewRewardsHandler(pool *pgxpool.Pool) *RewardsHandler {
 	return &RewardsHandler{
 		pool:    pool,
 		service: rewardcatalog.NewService(queries),
+		queries: queries,
 	}
 }
 
@@ -366,15 +372,84 @@ func (h *RewardsHandler) UploadCodes(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated:
-	// 1. Verify reward exists and is of type voucher_code
-	// 2. Parse CSV file
-	// 3. Insert voucher codes into voucher_pool table
-	// 4. Return count of codes uploaded
+	// Parse UUIDs
+	var tenantUUID, rewardUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := rewardUUID.Scan(rewardID); err != nil {
+		httputil.BadRequest(c, "Invalid reward ID format", nil)
+		return
+	}
+
+	// Verify reward exists and is of type voucher_code
+	reward, err := h.service.GetRewardByID(c.Request.Context(), rewardUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Reward not found")
+		return
+	}
+
+	if reward.Type != "voucher_code" {
+		httputil.BadRequest(c, "Reward must be of type voucher_code", nil)
+		return
+	}
+
+	// Open the uploaded file
+	fileHandle, err := file.Open()
+	if err != nil {
+		httputil.InternalError(c, "Failed to open file")
+		return
+	}
+	defer fileHandle.Close()
+
+	// Parse CSV file
+	reader := csv.NewReader(bufio.NewReader(fileHandle))
+	var codes []string
+	var codesUploaded int
+
+	// Read CSV line by line
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			httputil.BadRequest(c, "Failed to parse CSV file", err.Error())
+			return
+		}
+
+		// Skip empty lines
+		if len(record) == 0 || strings.TrimSpace(record[0]) == "" {
+			continue
+		}
+
+		// Get code from first column and trim whitespace
+		code := strings.TrimSpace(record[0])
+		if code != "" {
+			codes = append(codes, code)
+		}
+	}
+
+	// Insert voucher codes
+	for _, code := range codes {
+		_, err := h.queries.InsertVoucherCode(c.Request.Context(), db.InsertVoucherCodeParams{
+			TenantID: tenantUUID,
+			RewardID: rewardUUID,
+			Code:     code,
+		})
+		if err != nil {
+			// Log error but continue with other codes
+			// In production, you might want to collect errors and return them
+			continue
+		}
+		codesUploaded++
+	}
 
 	c.JSON(200, gin.H{
-		"reward_id":      rewardID,
-		"codes_uploaded": 0,
+		"reward_id":      formatUUID(rewardUUID),
+		"codes_uploaded": codesUploaded,
 		"file_name":      file.Filename,
+		"total_codes":    len(codes),
 	})
 }

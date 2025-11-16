@@ -1,32 +1,43 @@
 package handlers
 
 import (
+	"encoding/json"
+
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
+	"github.com/bmachimbira/loyalty/api/internal/rule"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RulesHandler handles rule-related API endpoints
 type RulesHandler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	service *rule.Service
 }
 
 // NewRulesHandler creates a new rules handler
 func NewRulesHandler(pool *pgxpool.Pool) *RulesHandler {
-	return &RulesHandler{pool: pool}
+	queries := db.New(pool)
+	return &RulesHandler{
+		pool:    pool,
+		service: rule.NewService(queries),
+	}
 }
 
 // CreateRuleRequest represents the request to create a rule
 type CreateRuleRequest struct {
 	Name         string                 `json:"name" binding:"required"`
 	Description  string                 `json:"description"`
+	EventType    string                 `json:"event_type" binding:"required"`
 	Conditions   map[string]interface{} `json:"conditions" binding:"required"`
 	RewardID     string                 `json:"reward_id" binding:"required"`
+	CampaignID   *string                `json:"campaign_id"`
 	Priority     int                    `json:"priority"`
-	CapPerUser   *int                   `json:"cap_per_user"`
+	CapPerUser   int                    `json:"cap_per_user"`
 	CapGlobal    *int                   `json:"cap_global"`
-	CooldownMins *int                   `json:"cooldown_mins"`
+	CooldownSecs int                    `json:"cooldown_secs"`
 	Active       bool                   `json:"active"`
 }
 
@@ -62,22 +73,80 @@ func (h *RulesHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// TODO: Validate JsonLogic conditions format
-	// TODO: Once sqlc is generated, use queries.CreateRule()
+	// Validate campaign ID if provided
+	if req.CampaignID != nil {
+		if err := httputil.ValidateUUID(*req.CampaignID); err != nil {
+			httputil.BadRequest(c, "Invalid campaign ID", nil)
+			return
+		}
+	}
+
+	// Parse UUIDs
+	var tenantUUID, rewardUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := rewardUUID.Scan(req.RewardID); err != nil {
+		httputil.BadRequest(c, "Invalid reward ID format", nil)
+		return
+	}
+
+	var campaignUUID pgtype.UUID
+	if req.CampaignID != nil {
+		if err := campaignUUID.Scan(*req.CampaignID); err != nil {
+			httputil.BadRequest(c, "Invalid campaign ID format", nil)
+			return
+		}
+	}
+
+	// Serialize conditions to JSON
+	conditionsJSON, err := json.Marshal(req.Conditions)
+	if err != nil {
+		httputil.BadRequest(c, "Invalid conditions format", nil)
+		return
+	}
+
+	// Prepare global cap
+	var globalCap pgtype.Int4
+	if req.CapGlobal != nil {
+		globalCap = pgtype.Int4{Int32: int32(*req.CapGlobal), Valid: true}
+	}
+
+	// Create rule using service
+	createdRule, err := h.service.CreateRule(c.Request.Context(), db.CreateRuleParams{
+		TenantID:    tenantUUID,
+		CampaignID:  campaignUUID,
+		Name:        req.Name,
+		EventType:   req.EventType,
+		Conditions:  conditionsJSON,
+		RewardID:    rewardUUID,
+		PerUserCap:  int32(req.CapPerUser),
+		GlobalCap:   globalCap,
+		CoolDownSec: int32(req.CooldownSecs),
+		Active:      req.Active,
+	})
+	if err != nil {
+		httputil.InternalError(c, "Failed to create rule")
+		return
+	}
+
+	// Parse conditions back for response
+	var conditions map[string]interface{}
+	json.Unmarshal(createdRule.Conditions, &conditions)
 
 	c.JSON(201, gin.H{
-		"id":            uuid.New().String(),
-		"tenant_id":     tenantID,
-		"name":          req.Name,
-		"description":   req.Description,
-		"conditions":    req.Conditions,
-		"reward_id":     req.RewardID,
-		"priority":      req.Priority,
-		"cap_per_user":  req.CapPerUser,
-		"cap_global":    req.CapGlobal,
-		"cooldown_mins": req.CooldownMins,
-		"active":        req.Active,
-		"created_at":    "2025-11-14T00:00:00Z",
+		"id":           formatUUID(createdRule.ID),
+		"tenant_id":    formatUUID(createdRule.TenantID),
+		"campaign_id":  formatUUID(createdRule.CampaignID),
+		"name":         createdRule.Name,
+		"event_type":   createdRule.EventType,
+		"conditions":   conditions,
+		"reward_id":    formatUUID(createdRule.RewardID),
+		"per_user_cap": createdRule.PerUserCap,
+		"global_cap":   createdRule.GlobalCap.Int32,
+		"cool_down_sec": createdRule.CoolDownSec,
+		"active":       createdRule.Active,
 	})
 }
 
@@ -92,10 +161,46 @@ func (h *RulesHandler) List(c *gin.Context) {
 	// Get filter params
 	activeOnly := c.DefaultQuery("active_only", "false")
 
-	// TODO: Once sqlc is generated, use queries.ListRules()
+	// Parse tenant UUID
+	var tenantUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+
+	// List rules using service
+	rules, err := h.service.ListRules(c.Request.Context(), tenantUUID, activeOnly == "true")
+	if err != nil {
+		httputil.InternalError(c, "Failed to list rules")
+		return
+	}
+
+	// Format response
+	rulesList := make([]gin.H, len(rules))
+	for i, rule := range rules {
+		var conditions map[string]interface{}
+		if len(rule.Conditions) > 0 {
+			json.Unmarshal(rule.Conditions, &conditions)
+		}
+
+		rulesList[i] = gin.H{
+			"id":            formatUUID(rule.ID),
+			"tenant_id":     formatUUID(rule.TenantID),
+			"campaign_id":   formatUUID(rule.CampaignID),
+			"name":          rule.Name,
+			"event_type":    rule.EventType,
+			"conditions":    conditions,
+			"reward_id":     formatUUID(rule.RewardID),
+			"per_user_cap":  rule.PerUserCap,
+			"global_cap":    rule.GlobalCap.Int32,
+			"cool_down_sec": rule.CoolDownSec,
+			"active":        rule.Active,
+		}
+	}
+
 	c.JSON(200, gin.H{
-		"rules": []gin.H{},
-		"total": 0,
+		"rules": rulesList,
+		"total": len(rules),
 		"filters": gin.H{
 			"active_only": activeOnly,
 		},
@@ -117,20 +222,42 @@ func (h *RulesHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.GetRule()
+	// Parse UUIDs
+	var tenantUUID, ruleUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := ruleUUID.Scan(ruleID); err != nil {
+		httputil.BadRequest(c, "Invalid rule ID format", nil)
+		return
+	}
+
+	// Get rule using service
+	rule, err := h.service.GetRuleByID(c.Request.Context(), ruleUUID, tenantUUID)
+	if err != nil {
+		httputil.NotFound(c, "Rule not found")
+		return
+	}
+
+	// Parse conditions
+	var conditions map[string]interface{}
+	if len(rule.Conditions) > 0 {
+		json.Unmarshal(rule.Conditions, &conditions)
+	}
+
 	c.JSON(200, gin.H{
-		"id":            ruleID,
-		"tenant_id":     tenantID,
-		"name":          "Sample Rule",
-		"description":   "A sample rule",
-		"conditions":    gin.H{},
-		"reward_id":     uuid.New().String(),
-		"priority":      0,
-		"cap_per_user":  nil,
-		"cap_global":    nil,
-		"cooldown_mins": nil,
-		"active":        true,
-		"created_at":    "2025-11-14T00:00:00Z",
+		"id":            formatUUID(rule.ID),
+		"tenant_id":     formatUUID(rule.TenantID),
+		"campaign_id":   formatUUID(rule.CampaignID),
+		"name":          rule.Name,
+		"event_type":    rule.EventType,
+		"conditions":    conditions,
+		"reward_id":     formatUUID(rule.RewardID),
+		"per_user_cap":  rule.PerUserCap,
+		"global_cap":    rule.GlobalCap.Int32,
+		"cool_down_sec": rule.CoolDownSec,
+		"active":        rule.Active,
 	})
 }
 
@@ -155,11 +282,52 @@ func (h *RulesHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.UpdateRule()
+	// Parse UUIDs
+	var tenantUUID, ruleUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := ruleUUID.Scan(ruleID); err != nil {
+		httputil.BadRequest(c, "Invalid rule ID format", nil)
+		return
+	}
+
+	// For now, we only support updating the active status
+	// Full update would require a new UpdateRule query
+	if req.Active != nil {
+		err := h.service.UpdateRuleStatus(c.Request.Context(), ruleUUID, tenantUUID, *req.Active)
+		if err != nil {
+			httputil.InternalError(c, "Failed to update rule")
+			return
+		}
+	}
+
+	// Get updated rule
+	rule, err := h.service.GetRuleByID(c.Request.Context(), ruleUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to get updated rule")
+		return
+	}
+
+	// Parse conditions
+	var conditions map[string]interface{}
+	if len(rule.Conditions) > 0 {
+		json.Unmarshal(rule.Conditions, &conditions)
+	}
+
 	c.JSON(200, gin.H{
-		"id":         ruleID,
-		"tenant_id":  tenantID,
-		"updated_at": "2025-11-14T00:00:00Z",
+		"id":            formatUUID(rule.ID),
+		"tenant_id":     formatUUID(rule.TenantID),
+		"campaign_id":   formatUUID(rule.CampaignID),
+		"name":          rule.Name,
+		"event_type":    rule.EventType,
+		"conditions":    conditions,
+		"reward_id":     formatUUID(rule.RewardID),
+		"per_user_cap":  rule.PerUserCap,
+		"global_cap":    rule.GlobalCap.Int32,
+		"cool_down_sec": rule.CoolDownSec,
+		"active":        rule.Active,
 	})
 }
 
@@ -179,9 +347,26 @@ func (h *RulesHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// TODO: Once sqlc is generated, use queries.DeactivateRule()
+	// Parse UUIDs
+	var tenantUUID, ruleUUID pgtype.UUID
+	if err := tenantUUID.Scan(tenantID); err != nil {
+		httputil.BadRequest(c, "Invalid tenant ID format", nil)
+		return
+	}
+	if err := ruleUUID.Scan(ruleID); err != nil {
+		httputil.BadRequest(c, "Invalid rule ID format", nil)
+		return
+	}
+
+	// Deactivate rule using service
+	err := h.service.DeactivateRule(c.Request.Context(), ruleUUID, tenantUUID)
+	if err != nil {
+		httputil.InternalError(c, "Failed to deactivate rule")
+		return
+	}
+
 	c.JSON(200, gin.H{
-		"id":      ruleID,
+		"id":      formatUUID(ruleUUID),
 		"message": "Rule deactivated successfully",
 	})
 }
