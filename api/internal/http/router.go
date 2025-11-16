@@ -51,8 +51,8 @@ func SetupRouter(pool *pgxpool.Pool, jwtSecret string, hmacKeys auth.HMACKeys) *
 	eventsHandler := handlers.NewEventsHandler(pool, rulesEngine, logger)
 	rulesHandler := handlers.NewRulesHandler(pool)
 	rewardsHandler := handlers.NewRewardsHandler(pool)
-	issuancesHandler := handlers.NewIssuancesHandler(pool)
-	budgetsHandler := handlers.NewBudgetsHandler(pool)
+	issuancesHandler := handlers.NewIssuancesHandler(pool, logger.Logger)
+	budgetsHandler := handlers.NewBudgetsHandler(pool, logger.Logger)
 	campaignsHandler := handlers.NewCampaignsHandler(pool)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
 

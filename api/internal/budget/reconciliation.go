@@ -46,8 +46,8 @@ func (s *Service) ReconcileBudget(ctx context.Context, tenantID, budgetID pgtype
 		return nil, errors.New("tenant_id and budget_id are required")
 	}
 
-	// Get current budget
-	budget, err := s.queries.GetBudgetByID(ctx, db.GetBudgetByIDParams{
+	// Get current budget to verify it exists
+	_, err := s.queries.GetBudgetByID(ctx, db.GetBudgetByIDParams{
 		ID:       budgetID,
 		TenantID: tenantID,
 	})
@@ -84,8 +84,11 @@ func (s *Service) ReconcileBudget(ctx context.Context, tenantID, budgetID pgtype
 	// Calculate totals by entry type
 	var totalFunded, totalReserved, totalCharged, totalReleased float64
 	for _, entry := range entries {
-		var amount float64
-		entry.Amount.Float(&amount)
+		amountVal, err := entry.Amount.Float64Value()
+		if err != nil {
+			return nil, fmt.Errorf("invalid amount value: %w", err)
+		}
+		amount := amountVal.Float64
 
 		switch entry.EntryType {
 		case "fund":

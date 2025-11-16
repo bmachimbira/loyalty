@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"log/slog"
+	"strings"
 
+	"github.com/bmachimbira/loyalty/api/internal/auth"
 	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/httputil"
 	"github.com/bmachimbira/loyalty/api/internal/issuance"
@@ -15,6 +17,7 @@ import (
 // IssuancesHandler handles issuance-related API endpoints
 type IssuancesHandler struct {
 	pool          *pgxpool.Pool
+	queries       *db.Queries
 	service       *issuance.Service
 	rewardService *reward.Service
 }
@@ -24,6 +27,7 @@ func NewIssuancesHandler(pool *pgxpool.Pool, logger *slog.Logger) *IssuancesHand
 	queries := db.New(pool)
 	return &IssuancesHandler{
 		pool:          pool,
+		queries:       queries,
 		service:       issuance.NewService(queries),
 		rewardService: reward.NewService(pool, queries),
 	}
@@ -216,25 +220,62 @@ func (h *IssuancesHandler) Redeem(c *gin.Context) {
 		return
 	}
 
-	// Get issuance to verify state
-	iss, err := h.service.GetIssuanceByID(c.Request.Context(), issuanceUUID, tenantUUID)
-	if err != nil {
-		httputil.NotFound(c, "Issuance not found")
-		return
+	// If staff PIN is provided, validate it against the authenticated user's password
+	if req.StaffPIN != "" {
+		// Get authenticated user from context (set by auth middleware)
+		userID, exists := c.Get("user_id")
+		if !exists {
+			httputil.Unauthorized(c, "User not authenticated")
+			return
+		}
+
+		// Parse user UUID
+		var userUUID pgtype.UUID
+		if err := userUUID.Scan(userID.(string)); err != nil {
+			httputil.InternalError(c, "Invalid user ID")
+			return
+		}
+
+		// Get staff user from database
+		staffUser, err := h.queries.GetStaffUserByID(c.Request.Context(), db.GetStaffUserByIDParams{
+			ID:       userUUID,
+			TenantID: tenantUUID,
+		})
+		if err != nil {
+			httputil.Unauthorized(c, "Staff user not found")
+			return
+		}
+
+		// Validate the staff PIN against the password hash
+		if err := auth.ComparePassword(staffUser.PwdHash, req.StaffPIN); err != nil {
+			httputil.Unauthorized(c, "Invalid staff PIN")
+			return
+		}
 	}
 
-	// Verify issuance is in issued state
-	if iss.Status != "issued" {
-		httputil.BadRequest(c, "Issuance must be in 'issued' state to redeem", nil)
-		return
-	}
-
-	// TODO: Validate OTP or staff PIN (requires OTP/PIN validation logic)
-	// TODO: Check expiry (requires expiry validation logic)
-
-	// Update issuance status to redeemed
-	err = h.service.UpdateIssuanceStatus(c.Request.Context(), issuanceUUID, tenantUUID, "issued", "redeemed")
+	// Use the reward service to redeem the issuance
+	// This handles:
+	// - State validation (must be "issued")
+	// - OTP/code validation (if OTP is provided)
+	// - Expiry checking
+	// - Budget charging
+	code := req.OTP
+	err := h.rewardService.RedeemIssuance(c.Request.Context(), issuanceUUID, tenantUUID, code)
 	if err != nil {
+		// Check for specific error types to provide better error messages
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "cannot redeem") || strings.Contains(errMsg, "must be issued") {
+			httputil.BadRequest(c, errMsg, nil)
+			return
+		}
+		if strings.Contains(errMsg, "invalid redemption code") {
+			httputil.BadRequest(c, "Invalid OTP code", nil)
+			return
+		}
+		if strings.Contains(errMsg, "expired") {
+			httputil.BadRequest(c, "Reward has expired", nil)
+			return
+		}
 		httputil.InternalError(c, "Failed to redeem issuance")
 		return
 	}

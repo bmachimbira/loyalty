@@ -84,10 +84,23 @@ func (s *Service) CheckSoftCapAlert(ctx context.Context, tenantID, budgetID pgty
 	}
 
 	// Convert numeric values
-	var balance, softCap, hardCap float64
-	budget.Balance.Float(&balance)
-	budget.SoftCap.Float(&softCap)
-	budget.HardCap.Float(&hardCap)
+	balanceVal, err := budget.Balance.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid balance value: %w", err)
+	}
+	balance := balanceVal.Float64
+
+	softCapVal, err := budget.SoftCap.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid soft cap value: %w", err)
+	}
+	softCap := softCapVal.Float64
+
+	hardCapVal, err := budget.HardCap.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid hard cap value: %w", err)
+	}
+	hardCap := hardCapVal.Float64
 
 	// Check if soft cap exceeded
 	if balance > softCap {
@@ -136,16 +149,27 @@ func (s *Service) CheckHardCapAlert(ctx context.Context, tenantID, budgetID pgty
 	}
 
 	// Convert numeric values
-	var balance, hardCap float64
-	budget.Balance.Float(&balance)
-	budget.HardCap.Float(&hardCap)
+	balanceVal, err := budget.Balance.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid balance value: %w", err)
+	}
+	balance := balanceVal.Float64
+
+	hardCapVal, err := budget.HardCap.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid hard cap value: %w", err)
+	}
+	hardCap := hardCapVal.Float64
 
 	utilization := (balance / hardCap) * 100
 
 	// Check if approaching hard cap (>95% by default)
 	if utilization >= thresholds.HardCapPercent {
-		var softCap float64
-		budget.SoftCap.Float(&softCap)
+		softCapVal, err := budget.SoftCap.Float64Value()
+		if err != nil {
+			return fmt.Errorf("invalid soft cap value: %w", err)
+		}
+		softCap := softCapVal.Float64
 
 		alert := Alert{
 			Type:        AlertTypeHardCap,
@@ -188,10 +212,23 @@ func (s *Service) TriggerHardCapReachedAlert(ctx context.Context, tenantID, budg
 	}
 
 	// Convert numeric values
-	var balance, softCap, hardCap float64
-	budget.Balance.Float(&balance)
-	budget.SoftCap.Float(&softCap)
-	budget.HardCap.Float(&hardCap)
+	balanceVal, err := budget.Balance.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid balance value: %w", err)
+	}
+	balance := balanceVal.Float64
+
+	softCapVal, err := budget.SoftCap.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid soft cap value: %w", err)
+	}
+	softCap := softCapVal.Float64
+
+	hardCapVal, err := budget.HardCap.Float64Value()
+	if err != nil {
+		return fmt.Errorf("invalid hard cap value: %w", err)
+	}
+	hardCap := hardCapVal.Float64
 
 	utilization := (balance / hardCap) * 100
 
@@ -263,10 +300,23 @@ func (s *Service) GetBudgetUtilization(ctx context.Context, tenantID, budgetID p
 	}
 
 	// Convert numeric values
-	var balance, softCap, hardCap float64
-	budget.Balance.Float(&balance)
-	budget.SoftCap.Float(&softCap)
-	budget.HardCap.Float(&hardCap)
+	balanceVal, err := budget.Balance.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid balance value: %w", err)
+	}
+	balance := balanceVal.Float64
+
+	softCapVal, err := budget.SoftCap.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid soft cap value: %w", err)
+	}
+	softCap := softCapVal.Float64
+
+	hardCapVal, err := budget.HardCap.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid hard cap value: %w", err)
+	}
+	hardCap := hardCapVal.Float64
 
 	available := hardCap - balance
 	utilization := 0.0

@@ -84,10 +84,23 @@ func (s *Service) GenerateBudgetReport(ctx context.Context, tenantID, budgetID p
 	}
 
 	// Convert budget numeric fields
-	var balance, softCap, hardCap float64
-	budget.Balance.Float(&balance)
-	budget.SoftCap.Float(&softCap)
-	budget.HardCap.Float(&hardCap)
+	balanceVal, err := budget.Balance.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid balance value: %w", err)
+	}
+	balance := balanceVal.Float64
+
+	softCapVal, err := budget.SoftCap.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid soft cap value: %w", err)
+	}
+	softCap := softCapVal.Float64
+
+	hardCapVal, err := budget.HardCap.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid hard cap value: %w", err)
+	}
+	hardCap := hardCapVal.Float64
 
 	// Calculate utilization
 	utilization := 0.0
@@ -247,7 +260,7 @@ func (s *Service) ExportReportCSV(report *BudgetReport, w io.Writer) error {
 
 	// Write data
 	row := []string{
-		report.BudgetID.Bytes.String(),
+		report.BudgetID.String(),
 		report.BudgetName,
 		report.Currency,
 		report.Period,
@@ -295,7 +308,7 @@ func (s *Service) ExportTenantReportCSV(reports []BudgetReport, w io.Writer) err
 	// Write data for each budget
 	for _, report := range reports {
 		row := []string{
-			report.BudgetID.Bytes.String(),
+			report.BudgetID.String(),
 			report.BudgetName,
 			report.Currency,
 			report.Period,

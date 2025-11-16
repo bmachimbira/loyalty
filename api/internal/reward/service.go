@@ -8,6 +8,7 @@ import (
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/bmachimbira/loyalty/api/internal/reward/handlers"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -24,7 +25,7 @@ func NewService(pool *pgxpool.Pool, queries *db.Queries) *Service {
 	s := &Service{
 		pool:     pool,
 		queries:  queries,
-		handlers: make(map[string]RewardHandler),
+		handlers: make(map[string]handlers.RewardHandler),
 	}
 
 	// Register all reward type handlers
@@ -154,7 +155,7 @@ func (s *Service) ProcessIssuance(ctx context.Context, issuanceID pgtype.UUID) e
 }
 
 // updateIssuanceWithResult updates the issuance record with processing results
-func (s *Service) updateIssuanceWithResult(ctx context.Context, tx interface{ Exec(context.Context, string, ...interface{}) (any, error) }, issuanceID, tenantID pgtype.UUID, result *handlers.ProcessResult) error {
+func (s *Service) updateIssuanceWithResult(ctx context.Context, tx pgx.Tx, issuanceID, tenantID pgtype.UUID, result *handlers.ProcessResult) error {
 	// Prepare code field
 	var code pgtype.Text
 	if result.Code != "" {
@@ -203,7 +204,7 @@ func (s *Service) updateState(ctx context.Context, issuanceID, tenantID pgtype.U
 }
 
 // updateStateInTx transitions an issuance to a new state within an existing transaction
-func (s *Service) updateStateInTx(ctx context.Context, tx interface{ Exec(context.Context, string, ...interface{}) (any, error) }, issuanceID, tenantID pgtype.UUID, fromState, toState State) error {
+func (s *Service) updateStateInTx(ctx context.Context, tx pgx.Tx, issuanceID, tenantID pgtype.UUID, fromState, toState State) error {
 	// Validate transition
 	if err := fromState.ValidateTransition(toState); err != nil {
 		return err
@@ -222,7 +223,7 @@ func (s *Service) updateStateInTx(ctx context.Context, tx interface{ Exec(contex
 	}
 
 	// Check if any rows were affected
-	if result == nil {
+	if result.RowsAffected() == 0 {
 		return fmt.Errorf("issuance not found or state mismatch")
 	}
 

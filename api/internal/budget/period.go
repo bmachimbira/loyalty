@@ -58,8 +58,11 @@ func (s *Service) ResetBudget(ctx context.Context, tenantID, budgetID pgtype.UUI
 		return nil, fmt.Errorf("failed to get budget: %w", err)
 	}
 
-	var previousBalance float64
-	budget.Balance.Float(&previousBalance)
+	balanceVal, err := budget.Balance.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid balance value: %w", err)
+	}
+	previousBalance := balanceVal.Float64
 
 	// If there's a balance and we want to create a rollover entry
 	if createRollover && previousBalance > 0 {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/bmachimbira/loyalty/api/internal/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -110,8 +111,11 @@ func (s *Service) TopupBudget(ctx context.Context, params TopupBudgetParams) (*T
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	var newBalance float64
-	updatedBudget.Balance.Float(&newBalance)
+	balanceVal, err := updatedBudget.Balance.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid balance value: %w", err)
+	}
+	newBalance := balanceVal.Float64
 
 	result := &TopupResult{
 		BudgetID:   params.BudgetID,

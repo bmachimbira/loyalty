@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -89,14 +90,12 @@ func (s *Service) ExpireOldIssuances(ctx context.Context) error {
 // 1. Find the reserve ledger entry
 // 2. Create a release ledger entry
 // 3. Update the budget balance
-func (s *Service) releaseBudget(ctx context.Context, tx interface{ Exec(context.Context, string, ...interface{}) (any, error) }, campaignID, issuanceID pgtype.UUID) error {
+func (s *Service) releaseBudget(ctx context.Context, tx pgx.Tx, campaignID, issuanceID pgtype.UUID) error {
 	// Get the budget ID from the campaign
 	var budgetID pgtype.UUID
 	var tenantID pgtype.UUID
 
-	err := tx.(interface {
-		QueryRow(context.Context, string, ...interface{}) interface{ Scan(...interface{}) error }
-	}).QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT budget_id, tenant_id
 		FROM campaigns
 		WHERE id = $1

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/bmachimbira/loyalty/api/internal/db"
@@ -42,7 +43,7 @@ type Service struct {
 // DBTX interface for database operations (matches sqlc's interface)
 type DBTX interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
-	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgx.CommandTag, error)
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 }
@@ -125,10 +126,23 @@ func (s *Service) ReserveBudget(ctx context.Context, params ReserveBudgetParams)
 
 	// Check soft cap (warning only)
 	softCapExceeded := false
-	var balance, softCap, hardCap float64
-	updatedBudget.Balance.Float(&balance)
-	updatedBudget.SoftCap.Float(&softCap)
-	updatedBudget.HardCap.Float(&hardCap)
+	balanceVal, err := updatedBudget.Balance.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid balance value: %w", err)
+	}
+	balance := balanceVal.Float64
+
+	softCapVal, err := updatedBudget.SoftCap.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid soft cap value: %w", err)
+	}
+	softCap := softCapVal.Float64
+
+	hardCapVal, err := updatedBudget.HardCap.Float64Value()
+	if err != nil {
+		return nil, fmt.Errorf("invalid hard cap value: %w", err)
+	}
+	hardCap := hardCapVal.Float64
 
 	if balance > softCap {
 		softCapExceeded = true
